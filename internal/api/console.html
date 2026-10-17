@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UPI Switch Console</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#fff; --text:#1d2330; --muted:#5b6475; --line:#dde1e8; --accent:#0b6e4f; --bad:#b42318; --warn:#9a6700; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151b; --panel:#1b2029; --text:#e6e9ef; --muted:#9aa3b2; --line:#2c3340; --accent:#3fbf8f; --bad:#f07167; --warn:#e0b04a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 12px 0 0; }
+  nav button, button { background:none; border:1px solid var(--line); color:var(--text); padding:6px 10px; border-radius:6px; cursor:pointer; font:inherit; }
+  nav button.on { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  input, select, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); }
+  main { padding:16px; max-width:1200px; margin:0 auto; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .muted { color:var(--muted); }
+  .SUCCESS, .ok, .ACTIVE, .DELIVERED, .MATCHED { color:var(--accent); }
+  .FAILED, .DEAD, .bad { color:var(--bad); }
+  .PENDING, .DEEMED, .INITIATED { color:var(--warn); }
+  pre { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:8px; border-radius:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>UPI Switch Console</h1>
+  <nav id="tabs"></nav>
+  <span style="flex:1"></span>
+  <input id="token" type="password" placeholder="Admin token" size="22" aria-label="Admin token">
+  <button id="save">Use token</button>
+</header>
+<main id="view"><section class="muted">Enter an admin token to begin.</section></main>
+<script>
+(() => {
+  const tabs = ["Tenants", "PSP banks", "Transactions", "Webhooks", "Recon", "Settlements", "Audit"];
+  let token = "";
+  try { token = sessionStorage.getItem("atf_token") || ""; } catch (e) {}
+  const $ = (s) => document.querySelector(s);
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const today = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  async function api(method, path, body) {
+    const r = await fetch(path, { method, headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const ct = r.headers.get("Content-Type") || "";
+    const data = ct.includes("json") ? await r.json() : await r.text();
+    if (!r.ok) throw new Error((data.error && data.error.message) || r.status);
+    return data;
+  }
+  function table(rows, cols) {
+    if (!rows || !rows.length) return '<p class="muted">Nothing here.</p>';
+    return "<table><tr>" + cols.map(c => `<th>${esc(c[0])}</th>`).join("") + "</tr>" +
+      rows.map(r => "<tr>" + cols.map(c => { const v = typeof c[1] === "function" ? c[1](r) : r[c[1]]; return `<td class="${esc(v)}">${c[2] ? v : esc(v)}</td>`; }).join("") + "</tr>").join("") + "</table>";
+  }
+  const view = $("#view");
+  const show = async (name) => {
+    document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.textContent === name));
+    try { view.innerHTML = await pages[name](); bind[name] && bind[name](); }
+    catch (e) { view.innerHTML = `<section class="bad">${esc(e.message)}</section>`; }
+  };
+  const pages = {
+    "Tenants": async () => {
+      const d = await api("GET", "/admin/tenants");
+      return `<section><h3>Onboard a payment gateway</h3><div class="row">
+        <input id="tn" placeholder="Name"><input id="tp" placeholder="VPA prefix (e.g. razorpg)"><input id="tw" placeholder="Webhook URL" size="34">
+        <button class="primary" id="onboard">Onboard</button></div><pre id="out" class="muted">Secrets are shown once after onboarding.</pre></section>
+        <section><h3>Tenants</h3>${table(d.tenants, [["ID","tenant_id"],["Name","name"],["Status","status"],["VPA prefix","vpa_prefix"],["API key","api_key_id"],["Webhook","webhook_url"],["Fee bps","fee_bps"]])}</section>`;
+    },
+    "PSP banks": async () => {
+      const d = await api("GET", "/admin/psps");
+      return `<section><h3>Router health</h3>${table(d.health, [["PSP","psp_id"],["Enabled","enabled"],["Success rate","success_rate"],["Latency ms","latency_ms"],["Cost bps","cost_bps"],["Score","score"],["Circuit open","circuit_open"],["Samples","samples"],["Last error","last_error"]])}</section>
+        <section><h3>Configured banks</h3>${table(d.psps, [["ID","psp_id"],["Name","name"],["Handle","handle"],["Endpoint","endpoint"],["Priority","priority"]])}</section>`;
+    },
+    "Transactions": async () => {
+      const st = window._st || "";
+      const d = await api("GET", "/admin/txns?limit=200" + (st ? "&status=" + encodeURIComponent(st) : ""));
+      return `<section><div class="row"><select id="st">${["","INITIATED","PENDING","SUCCESS","FAILED","DEEMED"].map(s => `<option ${s===st?"selected":""}>${s}</option>`).join("")}</select><button id="filter">Filter</button></div>
+        ${table(d.transactions, [["Txn","txn_id"],["Tenant","tenant_id"],["Type","type"],["Status","status"],["Amount","amount"],["Payee","payee_vpa"],["Payer","payer_vpa"],["PSP","psp"],["RRN","rrn"],["Code","resp_code"],["Created","created_at"]])}</section>`;
+    },
+    "Webhooks": async () => {
+      const d = await api("GET", "/admin/webhooks?status=DEAD");
+      return `<section><h3>Dead-letter queue</h3>${table(d.webhooks, [["ID","id"],["Tenant","tenant_id"],["Event","event_type"],["Attempts","attempts"],["Last error","last_error"],["", r => `<button data-replay="${esc(r.id)}">Replay</button>`, true]])}</section>`;
+    },
+    "Recon": async () => `<section><div class="row"><input id="rd" type="date" value="${today()}"><button class="primary" id="runrecon">Run recon (pull bank files)</button><button id="viewrecon">View latest</button></div><div id="rout"></div></section>`,
+    "Settlements": async () => `<section><div class="row"><input id="sd" type="date" value="${today()}"><button class="primary" id="runsettle">Compute T+1 settlement for this business date</button></div><div id="sout"></div></section>`,
+    "Audit": async () => {
+      const [v, d] = await Promise.all([api("GET", "/admin/audit/verify"), api("GET", "/admin/audit?limit=100")]);
+      return `<section><p class="${v.intact ? "ok" : "bad"}">Hash chain ${v.intact ? "intact" : "BROKEN at entry " + esc(v.first_broken_id)} · ${esc(v.entries)} entries</p>
+        ${table(d.entries, [["ID","id"],["At","at"],["Actor","actor"],["Action","action"],["Entity","entity"],["Entity id","entity_id"]])}</section>`;
+    },
+  };
+  const bind = {
+    "Tenants": () => $("#onboard").onclick = async () => {
+      try { const d = await api("POST", "/admin/tenants", { name: $("#tn").value, vpa_prefix: $("#tp").value, webhook_url: $("#tw").value });
+        $("#out").textContent = JSON.stringify({ tenant_id: d.tenant.tenant_id, api_key_id: d.api_key_id, hmac_secret: d.hmac_secret, webhook_secret: d.webhook_secret }, null, 2);
+      } catch (e) { $("#out").textContent = e.message; }
+    },
+    "Transactions": () => $("#filter").onclick = () => { window._st = $("#st").value; show("Transactions"); },
+    "Webhooks": () => document.querySelectorAll("[data-replay]").forEach(b => b.onclick = async () => { await api("POST", `/admin/webhooks/${b.dataset.replay}/replay`); show("Webhooks"); }),
+    "Recon": () => {
+      const render = (items) => $("#rout").innerHTML = table(items, [["Tenant","tenant_id"],["Txn","txn_id"],["Kind","kind"],["Category","category"],["Ledger","ledger_status"],["Bank","bank_status"],["NPCI","npci_status"],["Action","action"]]);
+      $("#runrecon").onclick = async () => { try { const d = await api("POST", "/admin/recon/run", { date: $("#rd").value }); render(d.exceptions); } catch (e) { $("#rout").textContent = e.message; } };
+      $("#viewrecon").onclick = async () => { try { const d = await api("GET", "/admin/recon?all=true&date=" + $("#rd").value); render(d.items); } catch (e) { $("#rout").textContent = e.message; } };
+    },
+    "Settlements": () => $("#runsettle").onclick = async () => {
+      try { const d = await api("POST", "/admin/settlements/run", { date: $("#sd").value });
+        $("#sout").innerHTML = table(d.settlements, [["Tenant","tenant_id"],["Merchant","merchant_id"],["Settle date", r => String(r.settle_date).slice(0,10)],["Txns","txn_count"],["Gross ₹", r => (r.gross_paise/100).toFixed(2)],["Refunds ₹", r => (r.refund_paise/100).toFixed(2)],["Fees ₹", r => (r.fee_paise/100).toFixed(2)],["Net ₹", r => (r.net_paise/100).toFixed(2)],["Status","status"]]);
+      } catch (e) { $("#sout").textContent = e.message; }
+    },
+  };
+  $("#tabs").innerHTML = tabs.map(t => `<button>${t}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.textContent));
+  $("#token").value = token;
+  $("#save").onclick = () => { token = $("#token").value; try { sessionStorage.setItem("atf_token", token); } catch (e) {} show("Tenants"); };
+  if (token) show("Tenants");
+})();
+</script>
+</body>
+</html>

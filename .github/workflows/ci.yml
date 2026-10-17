@@ -1,0 +1,31 @@
+name: ci
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: upiswitch_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Format and vet
+        run: make lint
+      - name: Unit tests
+        run: make test
+      - name: End-to-end tests (PostgreSQL + simulated banks)
+        run: make e2e
+      - name: Build binaries
+        run: make build
