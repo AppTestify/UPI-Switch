@@ -1,0 +1,80 @@
+# Local stack: PostgreSQL, Redis, the switch, and three simulated sponsor PSP banks.
+#   docker compose up --build
+#   docker compose run --rm --use-aliases demo   # drive a full payment lifecycle (--use-aliases lets the switch reach its webhook receiver)
+# Admin console: http://localhost:8080/admin/  (token: dev-admin-token-change-me)
+x-image: &image
+  build: .
+  image: apptestify/upi-switch:dev
+
+x-bank: &bank
+  <<: *image
+  entrypoint: ["/pspsim"]
+  volumes: [keys:/keys]
+  depends_on:
+    keygen: {condition: service_completed_successfully}
+
+services:
+  postgres:
+    image: postgres:16
+    environment: {POSTGRES_PASSWORD: postgres, POSTGRES_DB: upiswitch}
+    healthcheck: {test: ["CMD", "pg_isready", "-U", "postgres"], interval: 2s, retries: 30}
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:7
+
+  keygen:
+    <<: *image
+    entrypoint: ["/keygen", "-dir", "/keys"]
+    volumes: [keys:/keys]
+
+  bank-a:
+    <<: *bank
+    environment: {SIM_ID: bank-a, SIM_ORG: BKA, SIM_HANDLE: banka, SIM_KEY: /keys/bank-a.key, SWITCH_PUBLIC_KEY: /keys/switch.pub,
+                  LISTEN_ADDR: ":9101", SWITCH_CALLBACK_URL: "http://switch:8080/v1/npci/callback/bank-a"}
+  bank-b:
+    <<: *bank
+    environment: {SIM_ID: bank-b, SIM_ORG: BKB, SIM_HANDLE: bankb, SIM_KEY: /keys/bank-b.key, SWITCH_PUBLIC_KEY: /keys/switch.pub,
+                  LISTEN_ADDR: ":9102", SWITCH_CALLBACK_URL: "http://switch:8080/v1/npci/callback/bank-b"}
+  bank-c:
+    <<: *bank
+    environment: {SIM_ID: bank-c, SIM_ORG: BKC, SIM_HANDLE: bankc, SIM_KEY: /keys/bank-c.key, SWITCH_PUBLIC_KEY: /keys/switch.pub,
+                  LISTEN_ADDR: ":9103", SWITCH_CALLBACK_URL: "http://switch:8080/v1/npci/callback/bank-c"}
+
+  switch:
+    <<: *image
+    ports: ["8080:8080"]
+    volumes: [keys:/keys]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/upiswitch?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      SIGNING_KEY: /keys/switch.key
+      DATA_KEY: dev-data-key-change-me
+      ADMIN_TOKENS: "root:admin:dev-admin-token-change-me,ops:ops:dev-ops-token-change-me"
+      PSP_SEED: /etc/upi/psps.json
+      FIRST_CHECK_AFTER: 20s
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+      bank-a: {condition: service_started}
+      bank-b: {condition: service_started}
+      bank-c: {condition: service_started}
+
+  demo:
+    <<: *image
+    profiles: [demo]
+    entrypoint: ["/demo"]
+    environment:
+      SWITCH_URL: http://switch:8080
+      CONSOLE_URL: http://localhost:8080/admin/
+      ADMIN_TOKEN: dev-admin-token-change-me
+      BANK_A_URL: http://bank-a:9101
+      BANK_B_URL: http://bank-b:9102
+      BANK_C_URL: http://bank-c:9103
+      DEMO_WEBHOOK_ADDR: 0.0.0.0:9900
+      DEMO_WEBHOOK_URL: http://demo:9900/webhooks
+    depends_on: [switch]
+
+volumes:
+  pgdata:
+  keys:
