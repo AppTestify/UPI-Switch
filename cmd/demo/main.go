@@ -186,7 +186,7 @@ func main() {
 		fmt.Println("    ", e)
 	}
 	mu.Unlock()
-	fmt.Println("\nDone. Admin console:", switchURL+"/admin/")
+	fmt.Println("\nDone. Admin console:", config.Get("CONSOLE_URL", switchURL+"/admin/"))
 }
 
 func mustLoc(name string) *time.Location {

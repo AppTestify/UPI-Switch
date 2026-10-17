@@ -1,6 +1,6 @@
 # Local stack: PostgreSQL, Redis, the switch, and three simulated sponsor PSP banks.
 #   docker compose up --build
-#   docker compose run --rm demo        # drive a full payment lifecycle
+#   docker compose run --rm --use-aliases demo   # drive a full payment lifecycle (--use-aliases lets the switch reach its webhook receiver)
 # Admin console: http://localhost:8080/admin/  (token: dev-admin-token-change-me)
 x-image: &image
   build: .
@@ -66,6 +66,7 @@ services:
     entrypoint: ["/demo"]
     environment:
       SWITCH_URL: http://switch:8080
+      CONSOLE_URL: http://localhost:8080/admin/
       ADMIN_TOKEN: dev-admin-token-change-me
       BANK_A_URL: http://bank-a:9101
       BANK_B_URL: http://bank-b:9102

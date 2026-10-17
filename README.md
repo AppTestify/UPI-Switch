@@ -13,7 +13,7 @@ whole system runs and is tested end to end locally.
 ```bash
 # Docker: PostgreSQL, Redis, the switch and three simulated sponsor banks
 docker compose up --build -d
-docker compose run --rm demo          # onboard a PG, pay, collect, refund, AutoPay, recon, settle
+docker compose run --rm --use-aliases demo   # onboard a PG, pay, collect, refund, AutoPay, recon, settle
 open http://localhost:8080/admin/     # admin console, token: dev-admin-token-change-me
 
 # Without Docker (needs a local PostgreSQL)
