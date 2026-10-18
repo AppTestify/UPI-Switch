@@ -1,7 +1,9 @@
 # Local stack: PostgreSQL, Redis, the switch, and three simulated sponsor PSP banks.
 #   docker compose up --build
-#   docker compose run --rm --use-aliases demo   # drive a full payment lifecycle (--use-aliases lets the switch reach its webhook receiver)
-# Admin console: http://localhost:8080/admin/  (token: dev-admin-token-change-me)
+#   docker compose run --rm seed                 # 30 days of realistic demo history (five gateways, three sponsor banks)
+#   docker compose up -d traffic                 # keep live payments flowing so the console moves during a demo
+#   docker compose run --rm --use-aliases demo   # or drive one scripted payment lifecycle end to end
+# Admin console: http://localhost:8080/admin/  (sign in as admin@apptestify.in / Demo@2026)
 x-image: &image
   build: .
   image: apptestify/upi-switch:dev
@@ -51,6 +53,7 @@ services:
       SIGNING_KEY: /keys/switch.key
       DATA_KEY: dev-data-key-change-me
       ADMIN_TOKENS: "root:admin:dev-admin-token-change-me,ops:ops:dev-ops-token-change-me"
+      CONSOLE_USERS: "admin@apptestify.in:admin:Demo@2026,ops@apptestify.in:ops:Demo@2026,viewer@apptestify.in:viewer:Demo@2026"
       PSP_SEED: /etc/upi/psps.json
       FIRST_CHECK_AFTER: 20s
     depends_on:
@@ -73,6 +76,31 @@ services:
       BANK_C_URL: http://bank-c:9103
       DEMO_WEBHOOK_ADDR: 0.0.0.0:9900
       DEMO_WEBHOOK_URL: http://demo:9900/webhooks
+    depends_on: [switch]
+
+  seed:
+    <<: *image
+    profiles: [demo]
+    entrypoint: ["/seed"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/upiswitch?sslmode=disable
+      DATA_KEY: dev-data-key-change-me
+      SEED_WEBHOOK_URL: http://traffic:9900/webhooks
+    depends_on: [switch]
+
+  traffic:
+    <<: *image
+    profiles: [demo]
+    entrypoint: ["/traffic"]
+    restart: unless-stopped
+    environment:
+      SWITCH_URL: http://switch:8080
+      ADMIN_TOKEN: dev-admin-token-change-me
+      BANK_A_URL: http://bank-a:9101
+      BANK_B_URL: http://bank-b:9102
+      BANK_C_URL: http://bank-c:9103
+      TRAFFIC_WEBHOOK_ADDR: 0.0.0.0:9900
+      TRAFFIC_TPS: "0.15"
     depends_on: [switch]
 
 volumes:

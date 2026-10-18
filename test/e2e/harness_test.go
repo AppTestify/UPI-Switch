@@ -29,8 +29,9 @@ import (
 )
 
 const (
-	adminToken  = "admin-token-0123456789"
-	viewerToken = "viewer-token-0123456789"
+	adminToken      = "admin-token-0123456789"
+	viewerToken     = "viewer-token-0123456789"
+	consolePassword = "console-pass-123"
 )
 
 type harness struct {
@@ -142,8 +143,9 @@ func newHarness(t *testing.T) *harness {
 
 	cfg := config.Switch{
 		DatabaseURL: dbURL, OrgID: "ATF", DataKey: "e2e-data-key",
-		AdminTokens: "root:admin:" + adminToken + ",audit:viewer:" + viewerToken,
-		ReconTZ:     "UTC", PollEvery: time.Hour, WebhookEvery: time.Hour, HeartbeatEvery: time.Hour,
+		AdminTokens:  "root:admin:" + adminToken + ",audit:viewer:" + viewerToken,
+		ConsoleUsers: "ops@example.com:ops:" + consolePassword + ",viewer@example.com:viewer:" + consolePassword,
+		ReconTZ:      "UTC", PollEvery: time.Hour, WebhookEvery: time.Hour, HeartbeatEvery: time.Hour,
 		FirstCheckAfter: 50 * time.Millisecond, IntentExpiry: 15 * time.Minute, MaxCheckAttempts: 2,
 		BlockedMCC: []string{"6051"},
 	}

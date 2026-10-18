@@ -13,17 +13,43 @@ whole system runs and is tested end to end locally.
 ```bash
 # Docker: PostgreSQL, Redis, the switch and three simulated sponsor banks
 docker compose up --build -d
-docker compose run --rm --use-aliases demo   # onboard a PG, pay, collect, refund, AutoPay, recon, settle
-open http://localhost:8080/admin/     # admin console, token: dev-admin-token-change-me
+docker compose run --rm seed                 # 30 days of realistic demo history
+docker compose up -d traffic                 # live payments so the console moves during a demo
+open http://localhost:8080/admin/            # admin console: admin@apptestify.in / Demo@2026
+docker compose run --rm --use-aliases demo   # optional: one scripted lifecycle (onboard, pay, collect, refund, AutoPay, recon, settle)
 
 # Without Docker (needs a local PostgreSQL)
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/upiswitch?sslmode=disable ./scripts/run-local.sh
-go run ./cmd/demo                     # in another shell
+go run ./cmd/seed && go run ./cmd/traffic   # in another shell (DATA_KEY must match the switch)
 
 # Tests
 make test                             # unit tests
 make e2e                              # full system against PostgreSQL (TEST_DATABASE_URL)
 ```
+
+## Admin console
+
+`/admin/` is the operator console: email and password sign-in (`CONSOLE_USERS`, roles `admin` / `ops` / `viewer`)
+with an HttpOnly, SameSite=Strict session cookie signed from `DATA_KEY`. Pages:
+
+- **Overview**: successful volume, transactions, success rate, technical-decline rate against NPCI's 1% target,
+  average ticket and live throughput, each against the previous period; volume, success-rate and TD/BD decline
+  charts; sponsor-bank performance (share, SR, TD rate, p50/p95 time to final status); top NPCI decline codes
+  with who caused them; gateway leaderboard; value lost to technical declines; a live transaction feed.
+- **Transactions**: search by txn ID, RRN or merchant ref, filters, live streaming, CSV export, and a detail
+  drawer with the parties, response-code meaning (TD vs BD), status timeline, refunds and an on-demand bank status check.
+- **Sponsor banks** (live router scores, circuit state), **Payment gateways** (onboarding with one-time secrets,
+  key rotation, suspend), **Settlements** (T+1 lines, payout file, UTR capture), **Reconciliation** (match rate,
+  auto-resolved deemed payments, exceptions), **Disputes**, **Webhooks** (dead-letter replay) and **Audit log**
+  (hash-chain verification).
+
+**Demo data.** `cmd/seed` writes five fictional gateways (Kestrel Pay, Bluefin Payments, Saffron Checkout, Orbit
+PG, Monsoon Commerce), about 12,000 payments a day for 30 days with an IST daily curve, per-bank success rates,
+a realistic BD/TD decline mix, an 85-minute incident at the second bank three days ago, refunds, T+1 settlements
+and payouts, recon runs, disputes and a dead-lettered webhook outage. It refuses to run twice. `cmd/traffic` then
+keeps real payments flowing through the switch and the bank simulators (`TRAFFIC_TPS`, default 0.15/s at the
+daily average). Seeded history exists only in the ledger, so re-running reconciliation for a seeded day reports
+it as missing from the simulator's bank files; run recon live on a day with only traffic-generated payments.
 
 ## How the architecture maps to the code
 
@@ -78,11 +104,12 @@ with `X-ATF-Timestamp`, retried with backoff, then dead-lettered (`/admin/webhoo
 **6. Settlement files**: bank MIS and NPCI raw CSVs (`txn_id,rrn,type,amount,status,date`) with SHA-256
 checksums, pulled per bank or posted inline to `POST /admin/recon/run`.
 
-## Admin API (Bearer token, RBAC)
+## Admin API (Bearer token or console session, RBAC)
 
+`POST /admin/login` · `POST /admin/logout` · `GET /admin/me` · `GET /admin/stats/overview?range=today|24h|7d|30d&tenant=` ·
 `POST /admin/tenants` (onboard, returns secrets once) · `PATCH /admin/tenants/{id}` (limits, routing, IP list,
 suspend) · `POST /admin/tenants/{id}/rotate-keys` · `GET/PUT /admin/psps[/{id}]` (with live router health) ·
-`GET /admin/txns[/{id}]` · `POST /admin/txns/{id}/check` · `POST /admin/recon/run` · `GET /admin/recon` ·
+`GET /admin/txns[/{id}]` (`q`, `status`, `tenant`, `psp`, `type`, `limit`, `offset`) · `POST /admin/txns/{id}/check` · `POST /admin/recon/run` · `GET /admin/recon` ·
 `POST /admin/settlements/run` · `GET /admin/settlements?format=csv` (payout file) · `POST /admin/settlements/{id}/paid` ·
 `GET /admin/refunds/offline` · `POST /admin/refunds/offline-results` · `GET /admin/webhooks` ·
 `POST /admin/webhooks/{id}/replay` · `GET /admin/disputes` · `GET /admin/audit[/verify]`.
@@ -98,7 +125,7 @@ the bank offline to exercise failover; `GET /files/mis|npci-raw?date=` serves se
 ## Configuration
 
 Environment variables (see `internal/config`): `DATABASE_URL`, `REDIS_URL`, `DATA_KEY` (vault key, required),
-`SIGNING_KEY`/`SIGNING_KEY_ID`, `ADMIN_TOKENS` (`name:role:token,...`), `PSP_SEED`, `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`,
+`SIGNING_KEY`/`SIGNING_KEY_ID`, `ADMIN_TOKENS` (`name:role:token,...`), `CONSOLE_USERS` (`email:role:password,...`), `SESSION_TTL` (12h), `PSP_SEED`, `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`,
 `BANK_TLS_CERT`/`BANK_TLS_KEY`/`BANK_TLS_CA`, `BANK_IP_ALLOWLIST`, `TRUST_PROXY`, `RECON_TZ` (default Asia/Kolkata),
 `FIRST_CHECK_AFTER` (60s), `MAX_CHECK_ATTEMPTS` (6), `INTENT_EXPIRY` (15m), `BLOCKED_MCC`, `POLL_EVERY`, `WEBHOOK_EVERY`.
 

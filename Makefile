@@ -1,6 +1,6 @@
 TEST_DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/upiswitch_test?sslmode=disable
 
-.PHONY: build test e2e lint run demo up down
+.PHONY: build test e2e lint run demo seed traffic up down
 
 build:
 	go build -o bin/ ./cmd/...
@@ -19,6 +19,12 @@ run:
 
 demo:
 	go run ./cmd/demo
+
+seed:
+	go run ./cmd/seed
+
+traffic:
+	go run ./cmd/traffic
 
 up:
 	docker compose up --build -d

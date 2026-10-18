@@ -1,6 +1,8 @@
 [
-  {"psp_id": "bank-a", "name": "Bank A (primary PSP)", "endpoint": "http://localhost:9101", "handle": "banka",
+  {"psp_id": "bank-a", "name": "Aurora Bank", "endpoint": "http://localhost:9101", "handle": "banka",
    "cost_bps": 2, "priority": 1, "enabled": true, "public_key_file": "keys/bank-a.pub"},
-  {"psp_id": "bank-b", "name": "Bank B (secondary PSP)", "endpoint": "http://localhost:9102", "handle": "bankb",
-   "cost_bps": 3, "priority": 2, "enabled": true, "public_key_file": "keys/bank-b.pub"}
+  {"psp_id": "bank-b", "name": "Meridian Bank", "endpoint": "http://localhost:9102", "handle": "bankb",
+   "cost_bps": 3, "priority": 2, "enabled": true, "public_key_file": "keys/bank-b.pub"},
+  {"psp_id": "bank-c", "name": "Coastal Bank", "endpoint": "http://localhost:9103", "handle": "bankc",
+   "cost_bps": 5, "priority": 3, "enabled": true, "public_key_file": "keys/bank-c.pub"}
 ]

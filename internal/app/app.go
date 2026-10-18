@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -65,6 +66,24 @@ func ParseAdminTokens(s string) ([]api.AdminToken, error) {
 			return nil, fmt.Errorf("ADMIN_TOKENS entry %q must be name:role:token with role admin|ops|viewer and a token of 16+ chars", f[0])
 		}
 		out = append(out, api.AdminToken{Name: f[0], Role: f[1], Token: f[2]})
+	}
+	return out, nil
+}
+
+// ParseConsoleUsers parses "email:role:password,..." into console sign-ins.
+func ParseConsoleUsers(s string) ([]api.ConsoleUser, error) {
+	var out []api.ConsoleUser
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		f := strings.SplitN(part, ":", 3)
+		if len(f) != 3 || !strings.Contains(f[0], "@") || (f[1] != api.RoleAdmin && f[1] != api.RoleOps && f[1] != api.RoleViewer) || len(f[2]) < 8 {
+			return nil, fmt.Errorf("CONSOLE_USERS entry %q must be email:role:password with role admin|ops|viewer and a password of 8+ chars", f[0])
+		}
+		name, _, _ := strings.Cut(f[0], "@")
+		out = append(out, api.ConsoleUser{Email: strings.ToLower(f[0]), Name: name, Role: f[1], Password: f[2]})
 	}
 	return out, nil
 }
@@ -143,7 +162,14 @@ func New(ctx context.Context, cfg config.Switch, opt Options) (*App, error) {
 		}
 		lim = ratelimit.Redis{Client: redis.NewClient(o)}
 	}
-	srv := api.New(api.Config{AdminTokens: tokens, TrustProxy: cfg.TrustProxy, BankIPAllowlist: cfg.BankIPAllowlist}, svc, st, rc, lim, log, m)
+	users, err := ParseConsoleUsers(cfg.ConsoleUsers)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	sessionKey := sha256.Sum256([]byte("console-session:" + cfg.DataKey))
+	srv := api.New(api.Config{AdminTokens: tokens, TrustProxy: cfg.TrustProxy, BankIPAllowlist: cfg.BankIPAllowlist,
+		ConsoleUsers: users, SessionKey: sessionKey[:], SessionTTL: cfg.SessionTTL, Location: loc}, svc, st, rc, lim, log, m)
 	return &App{
 		Cfg: cfg, Pool: pool, Store: st, Service: svc, Recon: rc, Server: srv, Metrics: m, Log: log,
 		Dispatcher: &webhook.Dispatcher{Store: st, Log: log, Metrics: m},

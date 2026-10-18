@@ -29,6 +29,10 @@ type Config struct {
 	DefaultRateLimit int
 	TrustProxy       bool
 	BankIPAllowlist  []string
+	ConsoleUsers     []ConsoleUser
+	SessionKey       []byte        // signs console session cookies; sign-in is disabled when empty
+	SessionTTL       time.Duration // console session lifetime (default 12h)
+	Location         *time.Location
 }
 
 // Server wires handlers to the orchestrator.
@@ -49,6 +53,12 @@ func New(cfg Config, svc *core.Service, st *store.Store, rc *recon.Engine, lim r
 	}
 	if cfg.DefaultRateLimit <= 0 {
 		cfg.DefaultRateLimit = 500
+	}
+	if cfg.SessionTTL <= 0 {
+		cfg.SessionTTL = 12 * time.Hour
+	}
+	if cfg.Location == nil {
+		cfg.Location = time.UTC
 	}
 	if lim == nil {
 		lim = ratelimit.NewLocal()

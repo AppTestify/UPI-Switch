@@ -19,6 +19,8 @@ type Switch struct {
 	SigningKeyID     string
 	DataKey          string // vault key for tokenisation/encryption of VPAs and tenant secrets
 	AdminTokens      string // "name:role:token,name:role:token"
+	ConsoleUsers     string // "email:role:password,..." for console sign-in
+	SessionTTL       time.Duration
 	TLSCert, TLSKey  string // serve HTTPS when set
 	TLSClientCA      string // require/verify client certs (mTLS) when set
 	BankTLSCert      string // client cert presented to PSP banks
@@ -84,6 +86,8 @@ func LoadSwitch() Switch {
 		SigningKeyID:     Get("SIGNING_KEY_ID", "atf-switch-1"),
 		DataKey:          Get("DATA_KEY", ""),
 		AdminTokens:      Get("ADMIN_TOKENS", ""),
+		ConsoleUsers:     Get("CONSOLE_USERS", ""),
+		SessionTTL:       dur("SESSION_TTL", 12*time.Hour),
 		TLSCert:          Get("TLS_CERT", ""),
 		TLSKey:           Get("TLS_KEY", ""),
 		TLSClientCA:      Get("TLS_CLIENT_CA", ""),

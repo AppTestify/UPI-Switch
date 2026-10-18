@@ -38,6 +38,7 @@ const (
 	ctxTenant ctxKey = iota
 	ctxBody
 	ctxActor
+	ctxUser
 )
 
 func tenantFrom(ctx context.Context) *domain.Tenant {
@@ -280,28 +281,34 @@ const (
 
 var roleRank = map[string]int{RoleViewer: 1, RoleOps: 2, RoleAdmin: 3}
 
-// adminAuth checks a bearer token and that its role is at least need.
+// adminAuth accepts a bearer token or a signed console session cookie and checks that its role is at least need.
 func (s *Server) adminAuth(need string, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		var role, name string
-		if ok {
+		var u ConsoleUser
+		var actor string
+		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
 			for _, a := range s.cfg.AdminTokens {
 				if security.EqualHex(hexOf(a.Token), hexOf(tok)) {
-					role, name = a.Role, a.Name
+					u, actor = ConsoleUser{Email: a.Name, Name: a.Name, Role: a.Role}, "admin:"+a.Name
 					break
 				}
 			}
+		} else if ss, ok := s.sessionFrom(r); ok {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(HeaderConsole) == "" {
+				fail(w, http.StatusForbidden, "csrf", "console requests must carry the "+HeaderConsole+" header")
+				return
+			}
+			u, actor = ConsoleUser{Email: ss.Email, Name: ss.Name, Role: ss.Role}, "console:"+ss.Email
 		}
-		if role == "" {
-			fail(w, http.StatusUnauthorized, "unauthenticated", "valid admin bearer token required")
+		if u.Role == "" {
+			fail(w, http.StatusUnauthorized, "unauthenticated", "sign in or send a valid admin bearer token")
 			return
 		}
-		if roleRank[role] < roleRank[need] {
-			fail(w, http.StatusForbidden, "forbidden", "role "+role+" cannot perform this action")
+		if roleRank[u.Role] < roleRank[need] {
+			fail(w, http.StatusForbidden, "forbidden", "role "+u.Role+" cannot perform this action")
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), ctxActor, "admin:"+name)))
+		next(w, r.WithContext(withUser(r.Context(), u, actor)))
 	})
 }
 

@@ -40,6 +40,10 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /admin/disputes", a(RoleViewer, s.listDisputes))
 	mux.Handle("GET /admin/audit", a(RoleViewer, s.listAudit))
 	mux.Handle("GET /admin/audit/verify", a(RoleViewer, s.verifyAudit))
+	mux.HandleFunc("POST /admin/login", s.login)
+	mux.HandleFunc("POST /admin/logout", s.logout)
+	mux.Handle("GET /admin/me", a(RoleViewer, s.me))
+	mux.Handle("GET /admin/stats/overview", a(RoleViewer, s.overview))
 	mux.HandleFunc("GET /admin/", s.console)
 }
 
@@ -241,8 +245,9 @@ func (s *Server) upsertPSP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listTxns(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := store.TxnFilter{TenantID: q.Get("tenant"), Status: q.Get("status")}
+	f := store.TxnFilter{TenantID: q.Get("tenant"), Status: q.Get("status"), PSPID: q.Get("psp"), Type: q.Get("type"), Query: q.Get("q")}
 	f.Limit, _ = strconv.Atoi(q.Get("limit"))
+	f.Offset, _ = strconv.Atoi(q.Get("offset"))
 	if d := q.Get("date"); d != "" {
 		day, err := time.Parse("2006-01-02", d)
 		if err != nil {
@@ -256,7 +261,15 @@ func (s *Server) listTxns(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"transactions": txns})
+	total, err := s.store.CountTxns(r.Context(), f)
+	if err != nil {
+		s.writeErr(w, r, err)
+		return
+	}
+	if txns == nil {
+		txns = []*domain.Txn{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"transactions": txns, "total": total})
 }
 
 func (s *Server) getTxnAdmin(w http.ResponseWriter, r *http.Request) {

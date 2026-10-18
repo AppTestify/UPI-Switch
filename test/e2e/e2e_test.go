@@ -402,4 +402,79 @@ func TestSwitchEndToEnd(t *testing.T) {
 			t.Fatalf("console: %d", c.Code)
 		}
 	})
+
+	t.Run("console sign-in, session RBAC and analytics", func(t *testing.T) {
+		if r := h.do("POST", "/admin/login", map[string]string{"email": "ops@example.com", "password": "wrong-password"}, nil); r.Code != 401 {
+			t.Fatalf("bad password: %d", r.Code)
+		}
+		time.Sleep(400 * time.Millisecond) // sign-in attempts are rate limited per IP
+		login := h.do("POST", "/admin/login", map[string]string{"email": "OPS@example.com", "password": consolePassword}, nil)
+		if login.Code != 200 || login.Body["role"] != "ops" {
+			t.Fatalf("login: %d %s", login.Code, login.Raw)
+		}
+		var cookie string
+		for _, c := range login.Header.Values("Set-Cookie") {
+			if strings.HasPrefix(c, "atf_session=") {
+				cookie, _, _ = strings.Cut(c, ";")
+				if !strings.Contains(c, "HttpOnly") || !strings.Contains(c, "SameSite=Strict") {
+					t.Fatalf("cookie flags: %s", c)
+				}
+			}
+		}
+		if cookie == "" {
+			t.Fatal("no session cookie")
+		}
+		sess := map[string]string{"Cookie": cookie}
+		if me := h.do("GET", "/admin/me", nil, sess); me.Code != 200 || me.Body["email"] != "ops@example.com" {
+			t.Fatalf("me: %d %s", me.Code, me.Raw)
+		}
+		if r := h.do("GET", "/admin/me", nil, map[string]string{"Cookie": cookie + "x"}); r.Code != 401 {
+			t.Fatalf("tampered cookie: %d", r.Code)
+		}
+		// A cookie-authenticated write without the console header is refused (CSRF), with it the ops role applies.
+		if r := h.do("POST", "/admin/webhooks/1/replay", nil, sess); r.Code != 403 {
+			t.Fatalf("csrf: %d", r.Code)
+		}
+		sess["X-ATF-Console"] = "1"
+		if r := h.do("POST", "/admin/tenants", map[string]any{"name": "x", "vpa_prefix": "xx"}, sess); r.Code != 403 {
+			t.Fatalf("ops must not onboard tenants: %d", r.Code)
+		}
+
+		ov := h.do("GET", "/admin/stats/overview?range=today", nil, sess)
+		if ov.Code != 200 {
+			t.Fatalf("overview: %d %s", ov.Code, ov.Raw)
+		}
+		tot := ov.Body["totals"].(map[string]any)
+		if tot["count"].(float64) < 5 || tot["success"].(float64) < 1 || ov.Body["success_rate"].(float64) <= 0 {
+			t.Fatalf("overview totals: %s", ov.Raw)
+		}
+		if len(ov.Body["series"].([]any)) == 0 || len(ov.Body["psps"].([]any)) != 2 || len(ov.Body["tenants"].([]any)) == 0 {
+			t.Fatalf("overview breakdowns: %s", ov.Raw)
+		}
+		var sum float64
+		for _, b := range ov.Body["series"].([]any) {
+			sum += b.(map[string]any)["count"].(float64)
+		}
+		if sum != tot["count"].(float64) {
+			t.Fatalf("series sums to %v, totals say %v", sum, tot["count"])
+		}
+		for _, d := range ov.Body["declines"].([]any) {
+			d := d.(map[string]any)
+			if (d["code"] == "Z9" && d["kind"] != "BD") || (d["code"] == "U90" && d["kind"] != "TD") {
+				t.Fatalf("decline classification: %v", d)
+			}
+		}
+
+		found := h.do("GET", "/admin/txns?q="+intentTxn, nil, sess)
+		if found.Code != 200 || found.Body["total"].(float64) != 1 || found.Body["transactions"].([]any)[0].(map[string]any)["txn_id"] != intentTxn {
+			t.Fatalf("search: %s", found.Raw)
+		}
+		page := h.do("GET", "/admin/txns?limit=2&offset=1&tenant="+pg.tenantID, nil, sess)
+		if page.Code != 200 || len(page.Body["transactions"].([]any)) != 2 || page.Body["total"].(float64) < 3 {
+			t.Fatalf("paging: %s", page.Raw)
+		}
+		if r := h.do("POST", "/admin/logout", nil, sess); r.Code != 204 || !strings.Contains(r.Header.Get("Set-Cookie"), "Max-Age=0") {
+			t.Fatalf("logout: %d %v", r.Code, r.Header)
+		}
+	})
 }
