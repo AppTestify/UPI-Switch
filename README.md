@@ -30,7 +30,9 @@ make e2e                              # full system against PostgreSQL (TEST_DAT
 ## Admin console
 
 `/admin/` is the operator console: email and password sign-in (`CONSOLE_USERS`, roles `admin` / `ops` / `viewer`)
-with an HttpOnly, SameSite=Strict session cookie signed from `DATA_KEY`. Pages:
+with an HttpOnly, SameSite=Strict session cookie signed from `DATA_KEY`. Sessions are also recorded server-side,
+so signing out, removing a user or changing their role ends them at once, and they expire after `SESSION_IDLE`
+(30m) without use. Five failed sign-ins lock an account for 15 minutes. Pages:
 
 - **Overview**: successful volume, transactions, success rate, technical-decline rate against NPCI's 1% target,
   average ticket and live throughput, each against the previous period; volume, success-rate and TD/BD decline
@@ -42,11 +44,19 @@ with an HttpOnly, SameSite=Strict session cookie signed from `DATA_KEY`. Pages:
   key rotation, suspend), **Settlements** (T+1 lines, payout file, UTR capture), **Reconciliation** (match rate,
   auto-resolved deemed payments, exceptions), **Disputes**, **Webhooks** (dead-letter replay) and **Audit log**
   (hash-chain verification).
+- **Merchants** (KYC queue, verify / reject / suspend, NPCI category limits, profile drift against declared volume),
+  **Refunds** (all gateways, console refunds with a reason), **AutoPay mandates** (pre-debit notifications, debits,
+  revoke), **RBI turnaround** (deemed payments against the T+5 reversal deadline and the compensation owed) and
+  **NPCI & RBI rules** (every rule the switch enforces, with its circular). Bank downtime incidents show on
+  Sponsor banks.
 
 **Demo data.** `cmd/seed` writes five fictional gateways (Kestrel Pay, Bluefin Payments, Saffron Checkout, Orbit
 PG, Monsoon Commerce), about 12,000 payments a day for 30 days with an IST daily curve, per-bank success rates,
-a realistic BD/TD decline mix, an 85-minute incident at the second bank three days ago, refunds, T+1 settlements
-and payouts, recon runs, disputes and a dead-lettered webhook outage. It refuses to run twice. `cmd/traffic` then
+a realistic BD/TD decline mix, an 85-minute incident at the second bank three days ago (with its downtime record),
+refunds, T+1 settlements and payouts, recon runs, disputes and a dead-lettered webhook outage. Merchants carry legal
+names and KYC (most verified, a few pending, one rejected, one suspended), recurring merchants have AutoPay mandates
+with pre-debit notifications outside peak hours, and a few deemed payments are left open or reversed late so the
+turnaround tracker has cases. It refuses to run twice. `cmd/traffic` then
 keeps real payments flowing through the switch and the bank simulators (`TRAFFIC_TPS`, default 0.15/s at the
 daily average). Seeded history exists only in the ledger, so re-running reconciliation for a seeded day reports
 it as missing from the simulator's bank files; run recon live on a day with only traffic-generated payments.
@@ -86,7 +96,9 @@ it as missing from the simulator's bank files; run recon live on a day with only
 | POST | `/v1/upi/refund`, `/v1/upi/refund/bulk` | `mode: ONLINE \| OFFLINE` |
 | GET | `/v1/upi/refund/{id}` | |
 | POST | `/v1/upi/vpa/validate` | ReqValAdd |
-| POST | `/v1/upi/mandate`, `/{id}/execute`, `/{id}/revoke`; GET `/{id}` | UPI AutoPay |
+| POST | `/v1/upi/mandate`, `/{id}/notify`, `/{id}/execute`, `/{id}/revoke`; GET `/{id}` | UPI AutoPay (notify ≥ 24 h before each debit) |
+| POST/GET | `/v1/upi/merchants`, `/v1/upi/merchants/{id}` | Sub-merchant onboarding with PAN / GSTIN / CKYC |
+| GET | `/v1/upi/downtimes` | Active and recent sponsor-bank downtime |
 | POST/GET | `/v1/upi/disputes`, `/v1/upi/disputes/{id}` | UDIR |
 | GET | `/v1/upi/reports/recon?date=`, `/v1/upi/reports/settlements?date=` | Tenant-scoped reports |
 
@@ -112,7 +124,27 @@ suspend) · `POST /admin/tenants/{id}/rotate-keys` · `GET/PUT /admin/psps[/{id}
 `GET /admin/txns[/{id}]` (`q`, `status`, `tenant`, `psp`, `type`, `limit`, `offset`) · `POST /admin/txns/{id}/check` · `POST /admin/recon/run` · `GET /admin/recon` ·
 `POST /admin/settlements/run` · `GET /admin/settlements?format=csv` (payout file) · `POST /admin/settlements/{id}/paid` ·
 `GET /admin/refunds/offline` · `POST /admin/refunds/offline-results` · `GET /admin/webhooks` ·
-`POST /admin/webhooks/{id}/replay` · `GET /admin/disputes` · `GET /admin/audit[/verify]`.
+`POST /admin/webhooks/{id}/replay` · `GET /admin/disputes` · `GET /admin/audit[/verify]` ·
+`GET/POST /admin/merchants`, `GET /admin/merchants/{tenant}/{id}`, `POST …/decision` · `GET/POST /admin/refunds` ·
+`GET /admin/mandates[/{id}]`, `POST /admin/mandates/{id}/revoke` · `GET /admin/incidents` · `GET /admin/compliance/tat` ·
+`GET /admin/compliance/rules`. Reconciliation on uploaded (inline) files needs the admin role and records each
+file's SHA-256 in the audit log.
+
+## NPCI and RBI rules enforced
+
+| Rule | What the switch does | Source |
+|---|---|---|
+| Status checks | first ReqChkTxn 90 s after the payment, at most 3, all within 2 h, then DEEMED | NPCI UPI-OC-215 |
+| Response deadlines | ReqPay, ReqMandate, ReqComplaint 15 s; other APIs 10 s | NPCI UPI-OC-214 |
+| Category limits | ₹1 lakh general; ₹5 lakh capital markets, insurance, travel, government, hospitals and education; ₹2 lakh jewellery; higher limits only after merchant KYC | NPCI circulars, 2023–2025 |
+| Merchant KYC | gateways require KYC before a merchant takes payments (sandbox gateways can opt out); PAN / CKYC / Form 60 / OVD routes | RBI PA Directions |
+| Payee name | the verified legal name once KYC is done | NPCI UPI-OC-101-A |
+| Collect | person-to-person collect refused; merchant collect and AutoPay only for registered merchants | NPCI, 29 Jul 2025 |
+| AutoPay | pre-debit notice ≥ 24 h, debit not before the notified date nor above the notified amount, 1 attempt + 3 retries, no debits 10:00–13:00 and 17:00–21:30 IST, ₹15,000 without PIN (₹1 lakh insurance and mutual funds) | RBI e-mandate framework, NPCI UPI-OC-215-A |
+| Turnaround | deemed payments reversed by T+5, ₹100 a day owed after that, tracked per case | RBI DPSS.CO.PD No.629 (2019) |
+| Settlement | payments reconciliation finds differing from the bank or NPCI are held out of the payout | |
+
+MCC-to-category mapping and limits should be confirmed with the sponsor bank before go-live.
 
 ## Bank simulator
 
@@ -125,9 +157,10 @@ the bank offline to exercise failover; `GET /files/mis|npci-raw?date=` serves se
 ## Configuration
 
 Environment variables (see `internal/config`): `DATABASE_URL`, `REDIS_URL`, `DATA_KEY` (vault key, required),
-`SIGNING_KEY`/`SIGNING_KEY_ID`, `ADMIN_TOKENS` (`name:role:token,...`), `CONSOLE_USERS` (`email:role:password,...`), `SESSION_TTL` (12h), `PSP_SEED`, `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`,
+`SIGNING_KEY`/`SIGNING_KEY_ID`, `ADMIN_TOKENS` (`name:role:token,...`), `CONSOLE_USERS` (`email:role:password,...`), `SESSION_TTL` (12h), `SESSION_IDLE` (30m), `PSP_SEED`, `TLS_CERT`/`TLS_KEY`/`TLS_CLIENT_CA`,
 `BANK_TLS_CERT`/`BANK_TLS_KEY`/`BANK_TLS_CA`, `BANK_IP_ALLOWLIST`, `TRUST_PROXY`, `RECON_TZ` (default Asia/Kolkata),
-`FIRST_CHECK_AFTER` (60s), `MAX_CHECK_ATTEMPTS` (6), `INTENT_EXPIRY` (15m), `BLOCKED_MCC`, `POLL_EVERY`, `WEBHOOK_EVERY`.
+`FIRST_CHECK_AFTER` (90s), `MAX_CHECK_ATTEMPTS` (3), `CHECK_WINDOW` (2h), `PRE_DEBIT_NOTICE` (24h),
+`ALLOW_PEAK_MANDATES` (false; test environments only), `INTENT_EXPIRY` (15m), `BLOCKED_MCC`, `POLL_EVERY`, `WEBHOOK_EVERY`.
 
 ## Choices made where the pack left them open
 

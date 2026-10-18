@@ -40,6 +40,15 @@ func maskPAN(p string) string {
 	return p[:3] + "XXXX" + p[7:]
 }
 
+// maskRef keeps the last four characters of an identity reference.
+func maskRef(r string) string {
+	r = strings.TrimSpace(r)
+	if len(r) <= 4 {
+		return strings.Repeat("X", len(r))
+	}
+	return strings.Repeat("X", len(r)-4) + r[len(r)-4:]
+}
+
 func newMID() string { return "ATFM" + strings.ToUpper(security.RandomToken(5)) }
 
 // RegisterMerchant onboards a sub-merchant in KYC PENDING; the switch's operations team verifies it.
@@ -115,9 +124,13 @@ func (s *Service) GetMerchant(ctx context.Context, tenantID, id string) (*domain
 
 // merchantFor looks up the payment's merchant, registering an unknown one in KYC PENDING so it shows up
 // for review. Suspended merchants, rejected KYC and (when the gateway requires it) pending KYC are refused,
-// and the MCC must be the one assigned at onboarding.
-func (s *Service) merchantFor(ctx context.Context, t *domain.Tenant, req Merchant) (*domain.Merchant, error) {
+// and the MCC must be the one assigned at onboarding. Pull payments (collect, AutoPay) pass pull=true: they
+// debit a customer on the merchant's word, so the merchant must already be registered.
+func (s *Service) merchantFor(ctx context.Context, t *domain.Tenant, req Merchant, pull bool) (*domain.Merchant, error) {
 	m, err := s.store.GetMerchant(ctx, t.ID, req.ID)
+	if errors.Is(err, store.ErrNotFound) && pull {
+		return nil, errUnprocessable("merchant_not_registered", "merchant %s must be registered (POST /v1/upi/merchants) before it can send collect or AutoPay requests", req.ID)
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		m = &domain.Merchant{TenantID: t.ID, ID: req.ID, MID: newMID(), LegalName: req.Name, DisplayName: req.Name, MCC: req.MCC,
 			BusinessType: "SMALL", KYCStatus: domain.KYCPending, Status: domain.MerchantActive, Source: "FIRST_PAYMENT"}
@@ -179,9 +192,13 @@ func (s *Service) DecideMerchant(ctx context.Context, tenantID, id string, d Mer
 			if !slices.Contains(domain.KYCMethods, d.Method) {
 				return errValidation("method must be one of %v", domain.KYCMethods)
 			}
+			if d.Ref == "" && m.KYCRef == "" {
+				return errValidation("ref is required: the CKYC number or the id of the document checked")
+			}
 			now := time.Now()
 			m.KYCStatus, m.KYCMethod, m.VerifiedAt, evt = domain.KYCVerified, d.Method, &now, "merchant.kyc_verified"
 			if d.Ref != "" {
+				d.Ref = maskRef(d.Ref) // the full number stays with the gateway's KYC records, not in the switch or its audit log
 				m.KYCRef = d.Ref
 			}
 		case "reject":

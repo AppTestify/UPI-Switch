@@ -108,6 +108,10 @@ func (s *Server) observe(next http.Handler) http.Handler {
 			rid = security.RandomToken(8)
 		}
 		w.Header().Set(HeaderRequestID, rid)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if s.secureCookie(r) {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		rec := &statusRecorder{ResponseWriter: w}
 		next.ServeHTTP(rec, r)
 		route := r.Pattern
@@ -129,8 +133,9 @@ func (s *Server) observe(next http.Handler) http.Handler {
 func (s *Server) clientIP(r *http.Request) net.IP {
 	if s.cfg.TrustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			if ip := net.ParseIP(strings.TrimSpace(first)); ip != nil {
+			// The right-most entry is the one our proxy added; entries to its left are whatever the client sent.
+			hops := strings.Split(xff, ",")
+			if ip := net.ParseIP(strings.TrimSpace(hops[len(hops)-1])); ip != nil {
 				return ip
 			}
 		}

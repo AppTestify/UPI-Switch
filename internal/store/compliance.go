@@ -251,10 +251,11 @@ func (s *Store) ListMandates(ctx context.Context, f MandateFilter) ([]MandateRow
 		"payee_vpa", "merchant_id", "mcc", "max_amount_paise", "frequency", "start_date", "end_date", "umn", "psp_id", "resp_code", "created_at", "updated_at"} {
 		cols += "m." + c + ", "
 	}
+	// mandate_id <> '' lets the planner use the partial index transactions_mandate.
 	rows, err := s.q.Query(ctx, `SELECT `+cols+`
-		(SELECT COUNT(*) FROM transactions t WHERE t.mandate_id=m.id AND t.status='SUCCESS'),
-		(SELECT COALESCE(SUM(amount_paise),0) FROM transactions t WHERE t.mandate_id=m.id AND t.status='SUCCESS'),
-		(SELECT MAX(created_at) FROM transactions t WHERE t.mandate_id=m.id),
+		(SELECT COUNT(*) FROM transactions t WHERE t.mandate_id <> '' AND t.mandate_id=m.id AND t.status='SUCCESS'),
+		(SELECT COALESCE(SUM(amount_paise),0) FROM transactions t WHERE t.mandate_id <> '' AND t.mandate_id=m.id AND t.status='SUCCESS'),
+		(SELECT MAX(created_at) FROM transactions t WHERE t.mandate_id <> '' AND t.mandate_id=m.id),
 		(SELECT MIN(debit_date)::timestamptz FROM mandate_notifications n WHERE n.mandate_id=m.id AND n.status='NOTIFIED')
 		FROM mandates m`+where+` ORDER BY m.created_at DESC LIMIT $4 OFFSET $5`, append(args, f.Limit, f.Offset)...)
 	if err != nil {
@@ -283,7 +284,7 @@ func (s *Store) GetMandateAny(ctx context.Context, id string) (*domain.Mandate, 
 
 // MandateDebits lists the debits of a mandate, newest first.
 func (s *Store) MandateDebits(ctx context.Context, mandateID string) ([]*domain.Txn, error) {
-	return scanTxns(s.q.Query(ctx, `SELECT `+txnCols+` FROM transactions WHERE mandate_id=$1 ORDER BY created_at DESC LIMIT 100`, mandateID))
+	return scanTxns(s.q.Query(ctx, `SELECT `+txnCols+` FROM transactions WHERE mandate_id <> '' AND mandate_id=$1 ORDER BY created_at DESC LIMIT 100`, mandateID))
 }
 
 // MandateCounts counts mandates by status.
@@ -484,15 +485,17 @@ type TATCase struct {
 	DisputeID  string     `json:"dispute_id,omitempty"`
 }
 
-// TATCases returns payments created since t that went DEEMED, oldest unresolved first.
+// TATCases returns payments created since t that went DEEMED, plus every still-unresolved one however old (its
+// compensation keeps accruing), oldest unresolved first.
 func (s *Store) TATCases(ctx context.Context, tenantID string, since time.Time) ([]TATCase, error) {
 	rows, err := s.q.Query(ctx, `SELECT t.id, t.tenant_id, t.merchant_id, t.payee_name, t.payer_vpa_masked, t.amount_paise, t.psp_id, t.rrn,
 			t.status, t.created_at, d.at,
 			(SELECT MIN(at) FROM txn_events r WHERE r.entity_id=t.id AND r.from_status='DEEMED' AND r.to_status IN ('SUCCESS','FAILED')),
 			COALESCE((SELECT id FROM disputes x WHERE x.txn_id=t.id ORDER BY created_at LIMIT 1),'')
-		FROM (SELECT entity_id, MIN(at) at FROM txn_events WHERE to_status='DEEMED' AND at >= $2 GROUP BY entity_id) d
+		FROM (SELECT entity_id, MIN(at) at FROM txn_events WHERE to_status='DEEMED'
+			AND (at >= $2 OR entity_id IN (SELECT id FROM transactions WHERE status='DEEMED')) GROUP BY entity_id) d
 		JOIN transactions t ON t.id=d.entity_id
-		WHERE ($1='' OR t.tenant_id=$1) AND t.created_at >= $2
+		WHERE ($1='' OR t.tenant_id=$1) AND (t.created_at >= $2 OR t.status='DEEMED')
 		ORDER BY (t.status='DEEMED') DESC, t.created_at`, tenantID, since)
 	if err != nil {
 		return nil, err

@@ -170,7 +170,7 @@ func New(ctx context.Context, cfg config.Switch, opt Options) (*App, error) {
 	}
 	sessionKey := sha256.Sum256([]byte("console-session:" + cfg.DataKey))
 	srv := api.New(api.Config{AdminTokens: tokens, TrustProxy: cfg.TrustProxy, BankIPAllowlist: cfg.BankIPAllowlist,
-		ConsoleUsers: users, SessionKey: sessionKey[:], SessionTTL: cfg.SessionTTL, Location: loc}, svc, st, rc, lim, log, m)
+		ConsoleUsers: users, SessionKey: sessionKey[:], SessionTTL: cfg.SessionTTL, SessionIdle: cfg.SessionIdle, Location: loc}, svc, st, rc, lim, log, m)
 	return &App{
 		Cfg: cfg, Pool: pool, Store: st, Service: svc, Recon: rc, Server: srv, Metrics: m, Log: log,
 		Dispatcher: &webhook.Dispatcher{Store: st, Log: log, Metrics: m},

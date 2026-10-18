@@ -95,6 +95,8 @@ type Settlement struct {
 	RefundPaise int64     `json:"refund_paise"`
 	FeePaise    int64     `json:"fee_paise"`
 	NetPaise    int64     `json:"net_paise"`
+	HeldCount   int       `json:"held_count"` // payments held back because reconciliation flagged them
+	HeldPaise   int64     `json:"held_paise"`
 	Status      string    `json:"status"`
 	PayoutRef   string    `json:"payout_ref,omitempty"`
 }
@@ -106,20 +108,28 @@ type SettlementAgg struct {
 	TxnCount    int
 	GrossPaise  int64
 	RefundPaise int64
+	HeldCount   int
+	HeldPaise   int64
 }
 
-// AggregateForSettlement sums successful payments and refunds per tenant merchant for [from, to).
+// heldByRecon matches a payment reconciliation flagged as differing from the bank or NPCI, which must not be paid out.
+const heldByRecon = `EXISTS (SELECT 1 FROM recon_items ri WHERE ri.txn_id=transactions.id AND ri.category IN ('AMOUNT_MISMATCH','STATUS_MISMATCH'))`
+
+// AggregateForSettlement sums successful payments and refunds per tenant merchant for [from, to), leaving out (and
+// counting separately) payments that reconciliation holds.
 func (s *Store) AggregateForSettlement(ctx context.Context, from, to time.Time) ([]SettlementAgg, error) {
 	rows, err := s.q.Query(ctx, `
 		WITH p AS (
-			SELECT tenant_id, merchant_id, COUNT(*) AS n, SUM(amount_paise) AS gross FROM transactions
-			WHERE status='SUCCESS' AND created_at >= $1 AND created_at < $2 GROUP BY tenant_id, merchant_id
+			SELECT tenant_id, merchant_id, COUNT(*) FILTER (WHERE NOT held) AS n, COALESCE(SUM(amount_paise) FILTER (WHERE NOT held),0) AS gross,
+				COUNT(*) FILTER (WHERE held) AS hn, COALESCE(SUM(amount_paise) FILTER (WHERE held),0) AS hp
+			FROM (SELECT tenant_id, merchant_id, amount_paise, `+heldByRecon+` AS held FROM transactions
+				WHERE status='SUCCESS' AND created_at >= $1 AND created_at < $2) x GROUP BY tenant_id, merchant_id
 		), r AS (
 			SELECT t.tenant_id, t.merchant_id, SUM(r.amount_paise) AS refunded FROM refunds r JOIN transactions t ON t.id=r.txn_id
 			WHERE r.status='SUCCESS' AND r.created_at >= $1 AND r.created_at < $2 GROUP BY t.tenant_id, t.merchant_id
 		)
 		SELECT COALESCE(p.tenant_id, r.tenant_id), COALESCE(p.merchant_id, r.merchant_id), COALESCE(p.n,0),
-			COALESCE(p.gross,0), COALESCE(r.refunded,0)
+			COALESCE(p.gross,0), COALESCE(r.refunded,0), COALESCE(p.hn,0), COALESCE(p.hp,0)
 		FROM p FULL OUTER JOIN r ON p.tenant_id=r.tenant_id AND p.merchant_id=r.merchant_id`, from, to)
 	if err != nil {
 		return nil, err
@@ -128,7 +138,7 @@ func (s *Store) AggregateForSettlement(ctx context.Context, from, to time.Time) 
 	var out []SettlementAgg
 	for rows.Next() {
 		var a SettlementAgg
-		if err := rows.Scan(&a.TenantID, &a.MerchantID, &a.TxnCount, &a.GrossPaise, &a.RefundPaise); err != nil {
+		if err := rows.Scan(&a.TenantID, &a.MerchantID, &a.TxnCount, &a.GrossPaise, &a.RefundPaise, &a.HeldCount, &a.HeldPaise); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -138,19 +148,20 @@ func (s *Store) AggregateForSettlement(ctx context.Context, from, to time.Time) 
 
 // UpsertSettlement writes or recomputes a pending settlement line (paid lines are left alone).
 func (s *Store) UpsertSettlement(ctx context.Context, st *Settlement) error {
-	return s.q.QueryRow(ctx, `INSERT INTO settlements (id, tenant_id, merchant_id, settle_date, txn_count, gross_paise, refund_paise, fee_paise, net_paise)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+	return s.q.QueryRow(ctx, `INSERT INTO settlements (id, tenant_id, merchant_id, settle_date, txn_count, gross_paise, refund_paise, fee_paise, net_paise, held_count, held_paise)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		ON CONFLICT (tenant_id, merchant_id, settle_date) DO UPDATE SET txn_count=EXCLUDED.txn_count, gross_paise=EXCLUDED.gross_paise,
-			refund_paise=EXCLUDED.refund_paise, fee_paise=EXCLUDED.fee_paise, net_paise=EXCLUDED.net_paise
+			refund_paise=EXCLUDED.refund_paise, fee_paise=EXCLUDED.fee_paise, net_paise=EXCLUDED.net_paise,
+			held_count=EXCLUDED.held_count, held_paise=EXCLUDED.held_paise
 			WHERE settlements.status='PENDING_PAYOUT'
 		RETURNING id, status`, st.ID, st.TenantID, st.MerchantID, st.SettleDate, st.TxnCount, st.GrossPaise, st.RefundPaise,
-		st.FeePaise, st.NetPaise).Scan(&st.ID, &st.Status)
+		st.FeePaise, st.NetPaise, st.HeldCount, st.HeldPaise).Scan(&st.ID, &st.Status)
 }
 
 // ListSettlements returns settlement lines for a date (and tenant, if given).
 func (s *Store) ListSettlements(ctx context.Context, tenantID string, date time.Time) ([]Settlement, error) {
 	rows, err := s.q.Query(ctx, `SELECT id, tenant_id, merchant_id, settle_date, txn_count, gross_paise, refund_paise, fee_paise, net_paise,
-		status, payout_ref FROM settlements WHERE settle_date=$1 AND ($2='' OR tenant_id=$2) ORDER BY tenant_id, merchant_id`, date, tenantID)
+		held_count, held_paise, status, payout_ref FROM settlements WHERE settle_date=$1 AND ($2='' OR tenant_id=$2) ORDER BY tenant_id, merchant_id`, date, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +170,7 @@ func (s *Store) ListSettlements(ctx context.Context, tenantID string, date time.
 	for rows.Next() {
 		var st Settlement
 		if err := rows.Scan(&st.ID, &st.TenantID, &st.MerchantID, &st.SettleDate, &st.TxnCount, &st.GrossPaise, &st.RefundPaise,
-			&st.FeePaise, &st.NetPaise, &st.Status, &st.PayoutRef); err != nil {
+			&st.FeePaise, &st.NetPaise, &st.HeldCount, &st.HeldPaise, &st.Status, &st.PayoutRef); err != nil {
 			return nil, err
 		}
 		out = append(out, st)

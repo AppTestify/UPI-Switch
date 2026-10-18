@@ -1,7 +1,9 @@
 package api
 
 import (
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -57,6 +59,7 @@ type tenantRequest struct {
 	IPAllowlist []string        `json:"ip_allowlist"`
 	CertCN      string          `json:"cert_cn"`
 	FeeBps      *int            `json:"fee_bps"`
+	RequireKYC  *bool           `json:"require_kyc"` // shortcut for limits.require_kyc
 	Limits      *domain.Limits  `json:"limits"`
 	Routing     *domain.Routing `json:"routing"`
 }
@@ -84,14 +87,22 @@ func (s *Server) onboardTenant(w http.ResponseWriter, r *http.Request) {
 		ID: "pg_" + security.RandomToken(6), Name: req.Name, Status: "ACTIVE", APIKeyID: "ak_" + security.RandomToken(10),
 		HMACSecret: security.RandomToken(32), WebhookURL: req.WebhookURL, WebhookSecret: "whsec_" + security.RandomToken(24),
 		VPAPrefix: req.VPAPrefix, IPAllowlist: req.IPAllowlist, CertCN: req.CertCN,
-		// No per-transaction cap of its own: NPCI's category limits (risk engine) apply.
-		Limits: domain.Limits{VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500},
+		// No per-transaction cap of its own: NPCI's category limits (risk engine) apply. Merchants must pass KYC
+		// before they take payments (RBI PA Directions); a sandbox gateway can turn this off.
+		Limits: domain.Limits{VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500, RequireKYC: true},
 	}
 	if req.FeeBps != nil {
 		t.FeeBps = *req.FeeBps
 	}
 	if req.Limits != nil {
 		t.Limits = *req.Limits
+	}
+	if req.RequireKYC != nil {
+		t.Limits.RequireKYC = *req.RequireKYC
+	}
+	if t.FeeBps < 0 || t.FeeBps > 500 {
+		fail(w, http.StatusBadRequest, "validation_error", "fee_bps must be between 0 and 500")
+		return
 	}
 	if req.Routing != nil {
 		t.Routing = *req.Routing
@@ -165,6 +176,12 @@ func (s *Server) updateTenant(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Limits != nil {
 			t.Limits = *req.Limits
+		}
+		if req.RequireKYC != nil {
+			t.Limits.RequireKYC = *req.RequireKYC
+		}
+		if t.FeeBps < 0 || t.FeeBps > 500 {
+			return &core.Error{Status: http.StatusBadRequest, Code: "validation_error", Message: "fee_bps must be between 0 and 500"}
 		}
 		if req.Routing != nil {
 			t.Routing = *req.Routing
@@ -302,6 +319,7 @@ func (s *Server) checkTxn(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, r, err)
 		return
 	}
+	s.store.Audit(r.Context(), actorFrom(r.Context()), "txn.status_check", "txn", t.ID, map[string]any{"check": t.CheckAttempts + 1})
 	t, err = s.store.GetTxnAny(r.Context(), t.ID)
 	if err != nil {
 		s.writeErr(w, r, err)
@@ -328,7 +346,16 @@ func (s *Server) runRecon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var files *recon.Files
+	audit := map[string]any{"date": req.Date, "source": "bank and NPCI file servers"}
 	if req.BankCSV != "" || req.NPCICSV != "" {
+		// Files typed in by an operator can move deemed payments to SUCCESS, so only admins may supply them,
+		// and the audit log keeps a fingerprint of exactly what was used.
+		if u, _ := r.Context().Value(ctxUser).(ConsoleUser); roleRank[u.Role] < roleRank[RoleAdmin] {
+			fail(w, http.StatusForbidden, "forbidden", "only an admin may run reconciliation on uploaded files")
+			return
+		}
+		bh, nh := sha256.Sum256([]byte(req.BankCSV)), sha256.Sum256([]byte(req.NPCICSV))
+		audit["source"], audit["bank_sha256"], audit["npci_sha256"] = "uploaded files", hex.EncodeToString(bh[:]), hex.EncodeToString(nh[:])
 		files = &recon.Files{}
 		if files.Bank, err = recon.ParseCSV([]byte(req.BankCSV), ""); err == nil {
 			files.NPCI, err = recon.ParseCSV([]byte(req.NPCICSV), "")
@@ -345,7 +372,7 @@ func (s *Server) runRecon(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, r, err)
 		return
 	}
-	s.store.Audit(r.Context(), actorFrom(r.Context()), "recon.run", "recon_run", run.ID, map[string]any{"date": req.Date})
+	s.store.Audit(r.Context(), actorFrom(r.Context()), "recon.run", "recon_run", run.ID, audit)
 	exceptions := []store.ReconItem{}
 	for _, it := range items {
 		if it.Category != recon.CatMatched && it.Category != recon.CatDeemedResolved && it.Category != recon.CatPendingResolved {

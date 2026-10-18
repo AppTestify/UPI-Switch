@@ -493,8 +493,36 @@ func TestSwitchEndToEnd(t *testing.T) {
 		if page.Code != 200 || len(page.Body["transactions"].([]any)) != 2 || page.Body["total"].(float64) < 3 {
 			t.Fatalf("paging: %s", page.Raw)
 		}
+		// Reconciliation on uploaded files can turn deemed payments into successes: admins only.
+		if r := h.do("POST", "/admin/recon/run", map[string]any{"date": today, "bank_csv": "rrn,status,amount\n", "npci_csv": "rrn,status,amount\n"}, sess); r.Code != 403 {
+			t.Fatalf("ops recon with uploaded files: %d %s", r.Code, r.Raw)
+		}
 		if r := h.do("POST", "/admin/logout", nil, sess); r.Code != 204 || !strings.Contains(r.Header.Get("Set-Cookie"), "Max-Age=0") {
 			t.Fatalf("logout: %d %v", r.Code, r.Header)
+		}
+		// Sessions live server-side: a copy of the cookie stops working once the user signs out.
+		if r := h.do("GET", "/admin/me", nil, sess); r.Code != 401 {
+			t.Fatalf("cookie still valid after logout: %d", r.Code)
+		}
+	})
+
+	t.Run("console account lockout and security headers", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			time.Sleep(400 * time.Millisecond) // stay under the per-IP rate limit
+			if r := h.do("POST", "/admin/login", map[string]string{"email": "viewer@example.com", "password": "wrong-password"}, nil); r.Code != 401 {
+				t.Fatalf("bad password %d: %d", i, r.Code)
+			}
+		}
+		time.Sleep(400 * time.Millisecond)
+		if r := h.do("POST", "/admin/login", map[string]string{"email": "viewer@example.com", "password": consolePassword}, nil); r.Code != 429 || errCode(r) != "account_locked" {
+			t.Fatalf("locked account signed in: %d %s", r.Code, r.Raw)
+		}
+		c := h.do("GET", "/admin/", nil, nil)
+		if csp := c.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'sha256-") {
+			t.Fatalf("console CSP: %s", csp)
+		}
+		if c.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("nosniff: %v", c.Header)
 		}
 	})
 
@@ -545,6 +573,10 @@ func TestSwitchEndToEnd(t *testing.T) {
 		if r := pg.post("/v1/upi/collect", map[string]any{"merchant_ref": "P2P-1", "amount": "5.00", "payer_vpa": "bob@okhdfc",
 			"merchant": map[string]string{"id": "friend", "name": "A Friend", "mcc": "0000"}}); errCode(r) != "p2p_collect_not_allowed" {
 			t.Fatalf("p2p collect: %d %s", r.Code, r.Raw)
+		}
+		if r := pg.post("/v1/upi/collect", map[string]any{"merchant_ref": "UNREG-1", "amount": "5.00", "payer_vpa": "bob@okhdfc",
+			"merchant": map[string]string{"id": "madeup", "name": "Made Up", "mcc": "5411"}}); errCode(r) != "merchant_not_registered" {
+			t.Fatalf("collect for an unregistered merchant: %d %s", r.Code, r.Raw)
 		}
 		rules := h.admin("GET", "/admin/compliance/rules", nil)
 		if rules.Code != 200 || rules.Body["status_checks"].(map[string]any)["max_checks"].(float64) != 2 {

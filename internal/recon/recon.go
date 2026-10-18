@@ -375,7 +375,8 @@ func (e *Engine) notifyTenants(ctx context.Context, run *store.ReconRun, sum Sum
 	return nil
 }
 
-// Settle computes T+1 payouts for payments made on date: gross − refunds − MDR fee per tenant merchant.
+// Settle computes T+1 payouts for payments made on date: gross − refunds − MDR fee per tenant merchant. Payments
+// reconciliation flagged as differing from the bank or NPCI are held back until resolved.
 func (e *Engine) Settle(ctx context.Context, date time.Time) ([]store.Settlement, error) {
 	from, to := e.DayBounds(date)
 	aggs, err := e.Store.AggregateForSettlement(ctx, from, to)
@@ -398,7 +399,7 @@ func (e *Engine) Settle(ctx context.Context, date time.Time) ([]store.Settlement
 		fee := a.GrossPaise * int64(bps) / 10000
 		st := store.Settlement{
 			ID: npci.NewTxnID("STL"), TenantID: a.TenantID, MerchantID: a.MerchantID, SettleDate: settleDate, TxnCount: a.TxnCount,
-			GrossPaise: a.GrossPaise, RefundPaise: a.RefundPaise, FeePaise: fee, NetPaise: a.GrossPaise - a.RefundPaise - fee,
+			GrossPaise: a.GrossPaise, RefundPaise: a.RefundPaise, FeePaise: fee, HeldCount: a.HeldCount, HeldPaise: a.HeldPaise, NetPaise: a.GrossPaise - a.RefundPaise - fee,
 		}
 		if err := e.Store.UpsertSettlement(ctx, &st); err != nil {
 			return nil, err

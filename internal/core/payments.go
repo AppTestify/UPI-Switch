@@ -83,7 +83,7 @@ func (s *Service) CreateIntent(ctx context.Context, t *domain.Tenant, req Intent
 	if len(req.Note) > 50 {
 		return nil, errValidation("note must be at most 50 characters")
 	}
-	mer, err := s.merchantFor(ctx, t, req.Merchant)
+	mer, err := s.merchantFor(ctx, t, req.Merchant, false)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (s *Service) CreateCollect(ctx context.Context, t *domain.Tenant, req Colle
 	if err != nil {
 		return nil, errValidation("%v", err)
 	}
-	mer, err := s.merchantFor(ctx, t, req.Merchant)
+	mer, err := s.merchantFor(ctx, t, req.Merchant, true)
 	if err != nil {
 		return nil, err
 	}

@@ -32,6 +32,7 @@ type Config struct {
 	ConsoleUsers     []ConsoleUser
 	SessionKey       []byte        // signs console session cookies; sign-in is disabled when empty
 	SessionTTL       time.Duration // console session lifetime (default 12h)
+	SessionIdle      time.Duration // signed-in console sessions end after this long without use (default 30m)
 	Location         *time.Location
 }
 

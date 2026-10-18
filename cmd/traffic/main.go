@@ -112,7 +112,8 @@ func connect() []gateway {
 	}
 	t := demodata.Tenants[0]
 	t.Prefix = "live" + security.RandomToken(2)
-	b, _ := json.Marshal(map[string]any{"name": "Live Demo PG", "vpa_prefix": t.Prefix, "fee_bps": 20, "webhook_url": "http://" + hookAddr + "/webhooks"})
+	b, _ := json.Marshal(map[string]any{"name": "Live Demo PG", "vpa_prefix": t.Prefix, "fee_bps": 20, "webhook_url": "http://" + hookAddr + "/webhooks",
+		"require_kyc": false})
 	code, body := call("POST", switchURL+"/admin/tenants", map[string]string{"Authorization": "Bearer " + adminToken, "Content-Type": "application/json"}, b)
 	if code != http.StatusCreated {
 		fail(fmt.Errorf("onboard: %d %v", code, body))

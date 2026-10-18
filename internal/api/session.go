@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -29,6 +31,7 @@ const (
 )
 
 type session struct {
+	ID    string `json:"i"`
 	Email string `json:"e"`
 	Name  string `json:"n"`
 	Role  string `json:"r"`
@@ -61,11 +64,49 @@ func (s *Server) sessionFrom(r *http.Request) (session, bool) {
 	if err != nil || !hmac.Equal([]byte(sig), []byte(s.signSession(p))) {
 		return ss, false
 	}
-	if json.Unmarshal(p, &ss) != nil || time.Now().Unix() > ss.Exp || roleRank[ss.Role] == 0 {
+	if json.Unmarshal(p, &ss) != nil || time.Now().Unix() > ss.Exp || roleRank[ss.Role] == 0 || ss.ID == "" {
+		return ss, false
+	}
+	// The cookie only proves who signed in; the server-side record decides whether the session is still live
+	// (signed out, idle too long), and the user must still exist with the same role.
+	if _, err := s.store.TouchSession(r.Context(), ss.ID, s.sessionIdle()); err != nil {
+		return ss, false
+	}
+	if u, ok := s.userByLogin(ss.Email); !ok || u.Role != ss.Role {
+		_ = s.store.RevokeSession(r.Context(), ss.ID)
 		return ss, false
 	}
 	return ss, true
 }
+
+func (s *Server) sessionIdle() time.Duration {
+	if s.cfg.SessionIdle > 0 {
+		return s.cfg.SessionIdle
+	}
+	return 30 * time.Minute
+}
+
+// userByLogin finds a configured console user (or admin token holder) without checking a password.
+func (s *Server) userByLogin(login string) (ConsoleUser, bool) {
+	login = strings.ToLower(login)
+	for _, u := range s.cfg.ConsoleUsers {
+		if strings.ToLower(u.Email) == login {
+			return u, true
+		}
+	}
+	for _, a := range s.cfg.AdminTokens {
+		if strings.ToLower(a.Name) == login {
+			return ConsoleUser{Email: a.Name, Name: a.Name, Role: a.Role}, true
+		}
+	}
+	return ConsoleUser{}, false
+}
+
+// Sign-in lockout: this many failures within lockFor locks the account until lockFor has passed since the last one.
+const (
+	maxLoginFailures = 5
+	lockFor          = 15 * time.Minute
+)
 
 func (s *Server) secureCookie(r *http.Request) bool {
 	return r.TLS != nil || (s.cfg.TrustProxy && r.Header.Get("X-Forwarded-Proto") == "https")
@@ -107,24 +148,40 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusTooManyRequests, "rate_limited", "too many sign-in attempts; wait a moment")
 		return
 	}
+	login := strings.ToLower(strings.TrimSpace(req.Email))
+	if len(login) > 80 {
+		login = login[:80]
+	}
+	if n, last, err := s.store.RecentLoginFailures(r.Context(), "console:"+login, lockFor); err != nil {
+		s.writeErr(w, r, err)
+		return
+	} else if n >= maxLoginFailures && time.Since(last) < lockFor {
+		mins := int(math.Ceil((lockFor - time.Since(last)).Minutes()))
+		fail(w, http.StatusTooManyRequests, "account_locked", fmt.Sprintf("too many failed sign-ins; this account is locked for %d more minutes", mins))
+		return
+	}
 	u, ok := s.lookupUser(req.Email, req.Password)
 	if !ok || len(s.cfg.SessionKey) == 0 {
-		login := strings.ToLower(strings.TrimSpace(req.Email))
-		if len(login) > 80 {
-			login = login[:80]
-		}
 		s.store.Audit(r.Context(), "console:"+login, "console.login_failed", "console", "", map[string]any{"ip": s.clientIP(r).String()})
 		fail(w, http.StatusUnauthorized, "invalid_credentials", "email or password is incorrect")
 		return
 	}
 	ttl := s.cfg.SessionTTL
-	ss := session{Email: u.Email, Name: u.Name, Role: u.Role, Exp: time.Now().Add(ttl).Unix()}
+	ss := session{ID: security.RandomToken(24), Email: u.Email, Name: u.Name, Role: u.Role, Exp: time.Now().Add(ttl).Unix()}
+	if err := s.store.CreateSession(r.Context(), ss.ID, u.Email, u.Role, s.clientIP(r).String(), time.Unix(ss.Exp, 0)); err != nil {
+		s.writeErr(w, r, err)
+		return
+	}
 	s.setSessionCookie(w, r, s.encodeSession(ss), int(ttl.Seconds()))
 	s.store.Audit(r.Context(), "console:"+u.Email, "console.login", "console", u.Email, map[string]any{"ip": s.clientIP(r).String()})
 	writeJSON(w, http.StatusOK, map[string]string{"email": u.Email, "name": u.Name, "role": u.Role})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if ss, ok := s.sessionFrom(r); ok {
+		_ = s.store.RevokeSession(r.Context(), ss.ID)
+		s.store.Audit(r.Context(), "console:"+ss.Email, "console.logout", "console", ss.Email, map[string]any{"ip": s.clientIP(r).String()})
+	}
 	s.setSessionCookie(w, r, "", -1)
 	w.WriteHeader(http.StatusNoContent)
 }

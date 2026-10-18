@@ -68,6 +68,16 @@ func (c client) do(method, path string, body any) map[string]any {
 	return out
 }
 
+// try is do without exiting on an error response, for steps that show a rule refusing a request.
+func (c client) try(method, path string, body any) map[string]any {
+	b, _ := json.Marshal(body)
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	hdr := map[string]string{"Content-Type": "application/json", "X-Client-Id": c.keyID, "X-Timestamp": ts,
+		"X-Signature": security.SignRequest(c.secret, ts, method, path, b), "Idempotency-Key": security.RandomToken(8)}
+	_, out := call(method, switchURL+path, hdr, b)
+	return out
+}
+
 func admin(method, path string, body any) map[string]any {
 	b, _ := json.Marshal(body)
 	code, out := call(method, switchURL+path, map[string]string{"Authorization": "Bearer " + adminToken, "Content-Type": "application/json"}, b)
@@ -115,7 +125,8 @@ func main() {
 	}))
 
 	step(1, "Onboarding a payment gateway tenant from the admin API")
-	t := admin("POST", "/admin/tenants", map[string]any{"name": "Demo PG", "vpa_prefix": "demo" + security.RandomToken(2), "webhook_url": hookURL, "fee_bps": 20})
+	t := admin("POST", "/admin/tenants", map[string]any{"name": "Demo PG", "vpa_prefix": "demo" + security.RandomToken(2), "webhook_url": hookURL, "fee_bps": 20,
+		"require_kyc": false}) // sandbox: merchants are registered on their first payment
 	mu.Lock()
 	secret = t["webhook_secret"].(string)
 	mu.Unlock()
@@ -150,7 +161,7 @@ func main() {
 	}
 	fmt.Println("    refund", rf["refund_id"], "→", rf["status"])
 
-	step(6, "UPI AutoPay: create mandate, execute a debit")
+	step(6, "UPI AutoPay: create a mandate and send the pre-debit notification")
 	md := c.do("POST", "/v1/upi/mandate", map[string]any{"merchant_ref": ref + "-M", "payer_vpa": "carol@okaxis", "max_amount": "999.00", "frequency": "MONTHLY",
 		"start_date": time.Now().Format("2006-01-02"), "end_date": time.Now().AddDate(1, 0, 0).Format("2006-01-02"), "merchant": map[string]string{"id": "ott", "name": "OTT Plus", "mcc": "4899"}})
 	for i := 0; i < 60 && md["status"] == "PENDING"; i++ {
@@ -159,8 +170,14 @@ func main() {
 	}
 	fmt.Println("    mandate", md["mandate_id"], "→", md["status"], "umn", md["umn"])
 	if md["status"] == "ACTIVE" {
-		ex := c.do("POST", "/v1/upi/mandate/"+md["mandate_id"].(string)+"/execute", map[string]any{"merchant_ref": ref + "-M1", "amount": "199.00"})
-		fmt.Println("    debit", ex["txn_id"], "→", waitStatus(c, ex["txn_id"].(string), "SUCCESS", "FAILED")["status"])
+		// NPCI AutoPay: the payer is told at least 24 hours before each debit, so the debit itself runs tomorrow.
+		debitOn := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+		n := c.do("POST", "/v1/upi/mandate/"+md["mandate_id"].(string)+"/notify", map[string]any{"amount": "199.00", "debit_date": debitOn})
+		fmt.Println("    pre-debit notification", n["notification_id"], "→", n["status"], "for", debitOn)
+		ex := c.try("POST", "/v1/upi/mandate/"+md["mandate_id"].(string)+"/execute", map[string]any{"merchant_ref": ref + "-M1", "amount": "199.00"})
+		if e, ok := ex["error"].(map[string]any); ok {
+			fmt.Println("    debit today is refused as NPCI requires:", e["code"])
+		}
 	}
 
 	today := time.Now().In(mustLoc(config.Get("RECON_TZ", "Asia/Kolkata"))).Format("2006-01-02")

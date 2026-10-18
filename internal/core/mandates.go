@@ -51,7 +51,7 @@ func (s *Service) CreateMandate(ctx context.Context, t *domain.Tenant, req Manda
 	if err1 != nil || err2 != nil || end.Before(start) {
 		return nil, errValidation("start_date and end_date must be YYYY-MM-DD with end on or after start")
 	}
-	mer, err := s.merchantFor(ctx, t, req.Merchant)
+	mer, err := s.merchantFor(ctx, t, req.Merchant, true)
 	if err != nil {
 		return nil, err
 	}
@@ -341,6 +341,9 @@ func (s *Service) ExecuteMandate(ctx context.Context, t *domain.Tenant, mandateI
 		if ready := n.NotifiedAt.Add(s.cfg.PreDebitNotice); now.Before(ready) {
 			return errUnprocessable("pre_debit_notice_too_recent", "the payer was notified at %s; the debit can run from %s",
 				n.NotifiedAt.In(s.cfg.Location).Format("2006-01-02 15:04"), ready.In(s.cfg.Location).Format("2006-01-02 15:04"))
+		}
+		if today := now.In(s.cfg.Location).Format("2006-01-02"); today < n.DebitDate.Format("2006-01-02") {
+			return errUnprocessable("before_debit_date", "the payer was told the debit runs on %s", n.DebitDate.Format("2006-01-02"))
 		}
 		if amt > n.AmountPaise {
 			return errUnprocessable("exceeds_notified_amount", "the payer was notified of %s", domain.FormatAmount(n.AmountPaise))

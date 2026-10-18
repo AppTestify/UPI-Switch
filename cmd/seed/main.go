@@ -1,7 +1,8 @@
 // Command seed fills a switch database with realistic demo history: five fictional payment
 // gateways and their merchants, weeks of UPI payments with a daily traffic curve, success rates per
 // sponsor bank, business and technical declines (including one bank incident), deemed payments
-// resolved by recon, refunds, T+1 settlements and payouts, reconciliation runs, disputes and a few
+// resolved by recon (a few late, against RBI's T+5 turnaround), KYC'd merchants, AutoPay mandates with pre-debit
+// notifications, the downtime incident record, refunds, T+1 settlements and payouts, reconciliation runs, disputes and a few
 // dead-lettered webhooks. It only adds rows for its own tenants and refuses to run twice.
 //
 //	DATABASE_URL=... DATA_KEY=... go run ./cmd/seed
@@ -25,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/AppTestify/UPI-Switch/internal/config"
+	"github.com/AppTestify/UPI-Switch/internal/core"
 	"github.com/AppTestify/UPI-Switch/internal/db"
 	"github.com/AppTestify/UPI-Switch/internal/demodata"
 	"github.com/AppTestify/UPI-Switch/internal/domain"
@@ -102,7 +104,8 @@ func main() {
 		tn := &domain.Tenant{ID: t.ID, Name: t.Name, Status: "ACTIVE", APIKeyID: "ak_" + security.RandomToken(10),
 			HMACSecret: security.RandomToken(32), WebhookURL: *hook, WebhookSecret: "whsec_" + security.RandomToken(24),
 			VPAPrefix: t.Prefix, FeeBps: t.FeeBps,
-			Limits: domain.Limits{VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500}}
+			// Monsoon Commerce still lets merchants trade while KYC is in review; the others require it first.
+			Limits: domain.Limits{VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500, RequireKYC: t.ID != "pg_monsoon"}}
 		if _, err := st.GetTenant(ctx, t.ID); err == nil {
 			continue // left by an interrupted run
 		}
@@ -112,6 +115,7 @@ func main() {
 		must(st.Audit(ctx, actor, "tenant.onboard", "tenant", t.ID, map[string]any{"name": t.Name, "vpa_prefix": t.Prefix, "source": "demo seed"}))
 	}
 
+	plan := merchantPlan(vault, time.Now())
 	fmt.Println("generating payer identities")
 	payers := make([]payer, 25000)
 	for i := range payers {
@@ -123,6 +127,9 @@ func main() {
 	start := now.AddDate(0, 0, -*days).Truncate(time.Hour)
 	incidentFrom := time.Date(now.Year(), now.Month(), now.Day(), 19, 10, 0, 0, loc).AddDate(0, 0, -3)
 	incidentTo := incidentFrom.Add(85 * time.Minute)
+	minorFrom := time.Date(now.Year(), now.Month(), now.Day(), 11, 40, 0, 0, loc).AddDate(0, 0, -12)
+	minorTo := minorFrom.Add(22 * time.Minute)
+	var majorHit, minorHit int64
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	w := newWriter(pool)
@@ -146,6 +153,9 @@ func main() {
 			if p.id == psps[1%len(psps)].id && at.After(incidentFrom) && at.Before(incidentTo) {
 				td = 0.21 // sponsor bank incident: CBS timeouts for 85 minutes
 			}
+			if p.id == psps[2%len(psps)].id && at.After(minorFrom) && at.Before(minorTo) {
+				td = 0.12 // a short spell of slow responses
+			}
 			py := payers[rng.IntN(len(payers))]
 			if rng.IntN(5) == 0 { // repeat customers
 				py = payers[rng.IntN(len(payers)/20)]
@@ -153,7 +163,24 @@ func main() {
 			id := npci.NewTxnID("ATF")
 			typ := pickType(m)
 			amt := demodata.Amount(rng, m)
+			if typ == domain.TypeMandateDebit {
+				if at = offPeak(at, loc); at.After(now) {
+					continue
+				}
+			}
 			status, code, reason := outcome(p, td, typ)
+			if status == domain.StatusFailed && domain.IsTechnicalDecline(code) {
+				if at.After(incidentFrom) && at.Before(incidentTo) && p.id == psps[1%len(psps)].id {
+					majorHit++
+				} else if at.After(minorFrom) && at.Before(minorTo) && p.id == psps[2%len(psps)].id {
+					minorHit++
+				}
+			}
+			mer := plan[t.ID+"/"+m.ID]
+			mandateID := ""
+			if typ == domain.TypeMandateDebit {
+				mandateID, amt = w.mandate(t.ID, m, py, t.Prefix+"."+m.ID+"@"+p.handle, p.id, p.handle, id, amt, status, at, now)
+			}
 			final := at.Add(latency(status, code))
 			if final.After(now) {
 				final = now
@@ -162,7 +189,25 @@ func main() {
 			if code != "ZH" {
 				rrn = fmt.Sprintf("%d%011d", 4+rng.IntN(5), rng.Int64N(1e11))
 			}
-			if status == domain.StatusDeemed && now.Sub(at) > 26*time.Hour {
+			age := now.Sub(at)
+			if status == domain.StatusDeemed && age > 26*time.Hour && age < 10*24*time.Hour && rng.IntN(16) == 0 {
+				// not in the NPCI file either: still open, tracked against RBI's T+5 turnaround
+				w.event(id, "", "INITIATED", "api", "created", at)
+				w.event(id, "INITIATED", "DEEMED", "callback", "deemed approved; awaiting reconciliation", final)
+				d := dayOf(stats, at)
+				d.deemed = append(d.deemed, store.ReconItem{TenantID: t.ID, TxnID: id, RRN: rrn, Kind: "PAYMENT", Category: "UNRESOLVED_PENDING",
+					LedgerStatus: "DEEMED", BankStatus: "PENDING", LedgerPaise: amt, BankPaise: amt, Action: "not in NPCI file; TCC raised with remitter bank"})
+			} else if status == domain.StatusDeemed && age > 7*24*time.Hour && age < 10*24*time.Hour && rng.IntN(10) == 0 {
+				// reversed to the customer, but after the T+5 deadline: compensation is owed
+				w.event(id, "", "INITIATED", "api", "created", at)
+				w.event(id, "INITIATED", "DEEMED", "callback", "deemed approved; awaiting reconciliation", final)
+				resolved := core.TATDeadline(at, loc).Add(time.Duration(10+rng.IntN(40)) * time.Hour)
+				w.event(id, "DEEMED", "FAILED", "recon", "reversed to customer after TCC; credit not confirmed by beneficiary bank", resolved)
+				d := dayOf(stats, at)
+				d.deemed = append(d.deemed, store.ReconItem{TenantID: t.ID, TxnID: id, RRN: rrn, Kind: "PAYMENT", Category: "UNRESOLVED_PENDING",
+					LedgerStatus: "DEEMED", BankStatus: "PENDING", LedgerPaise: amt, BankPaise: amt, Action: "not in NPCI file; TCC raised with remitter bank"})
+				status, code, reason, final = domain.StatusFailed, "U30", "reversed after TCC", resolved
+			} else if status == domain.StatusDeemed && age > 26*time.Hour {
 				// recon resolved it the next morning
 				w.event(id, "", "INITIATED", "api", "created", at)
 				w.event(id, "INITIATED", "DEEMED", "callback", "deemed approved; awaiting reconciliation", final)
@@ -181,13 +226,13 @@ func main() {
 				}
 				src := "callback"
 				if rng.IntN(12) == 0 {
-					src = "chktxn"
+					src = fmt.Sprintf("chktxn %d/3", 1+rng.IntN(2))
 				}
 				w.event(id, from, string(status), src, reason, final)
 			}
 			ref := fmt.Sprintf("%s-%s-%07d", strings.ToUpper(t.Prefix[:3]), at.Format("0102"), n)
-			w.txn(id, t.ID, ref, string(typ), string(status), amt, t.Prefix+"."+m.ID+"@"+p.handle, m.Name, py, m.ID, m.MCC,
-				p.id, rrn, code, reason, at, final)
+			w.txn(id, t.ID, ref, string(typ), string(status), amt, t.Prefix+"."+m.ID+"@"+p.handle, mer.payeeName(), py, m.ID, m.MCC,
+				p.id, rrn, code, reason, mandateID, at, final)
 			d := dayOf(stats, at)
 			d.total++
 			if d.tenantOf[t.ID] == nil {
@@ -226,10 +271,17 @@ func main() {
 	must(w.flush())
 	fmt.Printf("  %d payments written\n", n)
 
+	fmt.Println("onboarding merchants and recording bank downtime")
+	must(writeMerchants(st, pool, plan, now))
+	must(incidents(pool, []seedIncident{
+		{psps[1%len(psps)].id, "HIGH", "technical declines at 21.0% over the last 5 minutes", 0.21, incidentFrom, incidentTo, majorHit},
+		{psps[2%len(psps)].id, "MEDIUM", "technical declines at 12.0% over the last 5 minutes", 0.12, minorFrom, minorTo, minorHit},
+	}))
 	fmt.Println("computing T+1 settlements and payouts")
 	must(settle(pool, loc, todayStart))
 	fmt.Println("recording reconciliation runs")
 	must(reconRuns(st, stats, loc, todayStart))
+	must(holdSettlements(pool, loc))
 	fmt.Println("raising disputes and webhook history")
 	must(disputes(pool, successIDs, now))
 	must(webhooks(pool, now))
@@ -345,9 +397,9 @@ func dayOf(m map[string]*dayStats, t time.Time) *dayStats {
 
 // writer batches rows and streams them with COPY.
 type writer struct {
-	pool                *pgxpool.Pool
-	txns, events, refns [][]any
-	refundN             int
+	pool                                   *pgxpool.Pool
+	txns, events, refns, mandates, notices [][]any
+	refundN, mandateN                      int
 }
 
 func newWriter(pool *pgxpool.Pool) *writer { return &writer{pool: pool} }
@@ -361,9 +413,9 @@ var (
 		"resp_code", "resp_reason", "check_attempts", "next_check_at", "created_at", "updated_at"}
 )
 
-func (w *writer) txn(id, tenant, ref, typ, status string, amt int64, payee, payeeName string, py payer, mid, mcc, psp, rrn, code, reason string, at, final time.Time) {
+func (w *writer) txn(id, tenant, ref, typ, status string, amt int64, payee, payeeName string, py payer, mid, mcc, psp, rrn, code, reason, mandate string, at, final time.Time) {
 	w.txns = append(w.txns, []any{id, tenant, ref, typ, status, amt, "INR", payee, payeeName, py.masked, py.token, py.enc, mid, mcc, "",
-		psp, rrn, code, reason, "", "", at.Add(15 * time.Minute), 1, nil, at, final})
+		psp, rrn, code, reason, "", mandate, at.Add(15 * time.Minute), 1, nil, at, final})
 	if len(w.txns) >= 20000 {
 		must(w.flush())
 	}
@@ -388,7 +440,8 @@ func (w *writer) flush() error {
 		table string
 		cols  []string
 		rows  *[][]any
-	}{{"transactions", txnCols, &w.txns}, {"txn_events", eventCols, &w.events}, {"refunds", refundCols, &w.refns}} {
+	}{{"mandates", mandateCols, &w.mandates}, {"mandate_notifications", noticeCols, &w.notices}, {"transactions", txnCols, &w.txns},
+		{"txn_events", eventCols, &w.events}, {"refunds", refundCols, &w.refns}} {
 		if len(*b.rows) == 0 {
 			continue
 		}
@@ -495,6 +548,22 @@ func reconRuns(st *store.Store, stats map[string]*dayStats, loc *time.Location, 
 		}
 	}
 	return nil
+}
+
+// holdSettlements takes payments reconciliation flagged out of the settlement lines still awaiting payout,
+// as recon.Engine.Settle does once reconciliation has run.
+func holdSettlements(pool *pgxpool.Pool, loc *time.Location) error {
+	_, err := pool.Exec(ctx, `
+		WITH h AS (
+			SELECT t.tenant_id, t.merchant_id, (t.created_at AT TIME ZONE $1)::date + 1 AS sd, COUNT(*) AS n, SUM(t.amount_paise) AS p
+			FROM recon_items ri JOIN transactions t ON t.id=ri.txn_id
+			WHERE ri.category IN ('AMOUNT_MISMATCH','STATUS_MISMATCH') AND t.status='SUCCESS' GROUP BY 1,2,3
+		)
+		UPDATE settlements s SET held_count=h.n, held_paise=h.p, txn_count=s.txn_count-h.n, gross_paise=s.gross_paise-h.p,
+			fee_paise=s.fee_paise - h.p*tn.fee_bps/10000, net_paise=s.net_paise - (h.p - h.p*tn.fee_bps/10000)
+		FROM h, tenants tn
+		WHERE s.tenant_id=h.tenant_id AND s.merchant_id=h.merchant_id AND s.settle_date=h.sd AND tn.id=s.tenant_id AND s.status='PENDING_PAYOUT'`, loc.String())
+	return err
 }
 
 func disputes(pool *pgxpool.Pool, txns []sampleTxn, now time.Time) error {

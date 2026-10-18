@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -101,7 +102,7 @@ func merchantRow(row store.MerchantRow, days int) map[string]any {
 	drift := row.DeclaredPaise > 0 && monthly > row.DeclaredPaise*3/2
 	return withFields(row.Merchant, map[string]any{
 		"count": row.Count, "success_rate": sr, "volume": domain.FormatAmount(row.Paise), "volume_paise": row.Paise,
-		"profile_drift": drift, "monthly_run_rate": domain.FormatAmount(monthly),
+		"profile_drift": drift, "monthly_run_rate": domain.FormatAmount(monthly), "limits": limitsView(row.Merchant)["limits"],
 	})
 }
 
@@ -388,7 +389,10 @@ func (s *Server) adminIncidents(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"incidents": list, "policy": core.DefaultIncidentPolicy})
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": list, "policy": map[string]any{
+		"window": fmt.Sprintf("%.0f minutes", core.DefaultIncidentPolicy.Window.Minutes()), "min_samples": core.DefaultIncidentPolicy.MinSamples,
+		"open_at": core.DefaultIncidentPolicy.OpenAt, "high_at": core.DefaultIncidentPolicy.HighAt, "close_below": core.DefaultIncidentPolicy.CloseBelow,
+	}})
 }
 
 // ---- RBI turnaround and the rules the switch enforces ----

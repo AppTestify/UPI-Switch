@@ -243,7 +243,8 @@ func (c *tenantClient) get(path string) resp { return c.call(http.MethodGet, pat
 
 func (h *harness) onboard(name, prefix, webhookURL string) *tenantClient {
 	h.t.Helper()
-	r := h.admin("POST", "/admin/tenants", map[string]any{"name": name, "vpa_prefix": prefix, "webhook_url": webhookURL, "fee_bps": 30})
+	r := h.admin("POST", "/admin/tenants", map[string]any{"name": name, "vpa_prefix": prefix, "webhook_url": webhookURL, "fee_bps": 30,
+		"require_kyc": false}) // most tests pay merchants registered on their first payment
 	if r.Code != http.StatusCreated {
 		h.t.Fatalf("onboard: %d %s", r.Code, r.Raw)
 	}
@@ -253,7 +254,16 @@ func (h *harness) onboard(name, prefix, webhookURL string) *tenantClient {
 		h.hooks.secret = r.Body["webhook_secret"].(string)
 		h.hooks.mu.Unlock()
 	}
-	return &tenantClient{h: h, keyID: r.Body["api_key_id"].(string), secret: r.Body["hmac_secret"].(string), tenantID: tn["tenant_id"].(string)}
+	tc := &tenantClient{h: h, keyID: r.Body["api_key_id"].(string), secret: r.Body["hmac_secret"].(string), tenantID: tn["tenant_id"].(string)}
+	// Collect and AutoPay need a merchant registered beforehand; the tests use these for pull payments.
+	for i, id := range []string{"m1", "m3", "ott"} {
+		m := merchant(id)
+		reg := tc.post("/v1/upi/merchants", map[string]any{"merchant_id": id, "legal_name": m["name"], "mcc": m["mcc"], "pan": fmt.Sprintf("ABCPE%04dF", 1000+i)})
+		if reg.Code != http.StatusCreated {
+			h.t.Fatalf("register merchant %s: %d %s", id, reg.Code, reg.Raw)
+		}
+	}
+	return tc
 }
 
 // settle waits for simulator callbacks, then drains the poller and the webhook outbox.

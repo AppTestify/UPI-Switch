@@ -78,7 +78,7 @@ type Txn struct {
 	IntentURI      string     `json:"intent_uri,omitempty"`
 	MandateID      string     `json:"mandate_id,omitempty"`
 	ExpiresAt      time.Time  `json:"expires_at"`
-	CheckAttempts  int        `json:"-"`
+	CheckAttempts  int        `json:"check_attempts"`
 	NextCheckAt    *time.Time `json:"-"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
