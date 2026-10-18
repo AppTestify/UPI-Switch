@@ -84,7 +84,8 @@ func (s *Server) onboardTenant(w http.ResponseWriter, r *http.Request) {
 		ID: "pg_" + security.RandomToken(6), Name: req.Name, Status: "ACTIVE", APIKeyID: "ak_" + security.RandomToken(10),
 		HMACSecret: security.RandomToken(32), WebhookURL: req.WebhookURL, WebhookSecret: "whsec_" + security.RandomToken(24),
 		VPAPrefix: req.VPAPrefix, IPAllowlist: req.IPAllowlist, CertCN: req.CertCN,
-		Limits: domain.Limits{MaxTxnPaise: 100000_00, VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500},
+		// No per-transaction cap of its own: NPCI's category limits (risk engine) apply.
+		Limits: domain.Limits{VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500},
 	}
 	if req.FeeBps != nil {
 		t.FeeBps = *req.FeeBps
@@ -245,7 +246,7 @@ func (s *Server) upsertPSP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listTxns(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := store.TxnFilter{TenantID: q.Get("tenant"), Status: q.Get("status"), PSPID: q.Get("psp"), Type: q.Get("type"), Query: q.Get("q")}
+	f := store.TxnFilter{TenantID: q.Get("tenant"), Status: q.Get("status"), PSPID: q.Get("psp"), Type: q.Get("type"), Query: q.Get("q"), Merchant: q.Get("merchant")}
 	f.Limit, _ = strconv.Atoi(q.Get("limit"))
 	f.Offset, _ = strconv.Atoi(q.Get("offset"))
 	if d := q.Get("date"); d != "" {

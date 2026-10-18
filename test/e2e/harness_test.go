@@ -82,7 +82,7 @@ func (rc *receiver) find(typ, entityID string) map[string]any {
 			continue
 		}
 		d, _ := e["data"].(map[string]any)
-		for _, k := range []string{"txn_id", "refund_id", "mandate_id", "dispute_id"} {
+		for _, k := range []string{"txn_id", "refund_id", "mandate_id", "dispute_id", "merchant_id", "psp_id"} {
 			if entityID == "" || d[k] == entityID {
 				return e
 			}
@@ -146,7 +146,7 @@ func newHarness(t *testing.T) *harness {
 		AdminTokens:  "root:admin:" + adminToken + ",audit:viewer:" + viewerToken,
 		ConsoleUsers: "ops@example.com:ops:" + consolePassword + ",viewer@example.com:viewer:" + consolePassword,
 		ReconTZ:      "UTC", PollEvery: time.Hour, WebhookEvery: time.Hour, HeartbeatEvery: time.Hour,
-		FirstCheckAfter: 50 * time.Millisecond, IntentExpiry: 15 * time.Minute, MaxCheckAttempts: 2,
+		FirstCheckAfter: 50 * time.Millisecond, IntentExpiry: 15 * time.Minute, MaxCheckAttempts: 2, AllowPeakMandates: true,
 		BlockedMCC: []string{"6051"},
 	}
 	a, err := app.New(context.Background(), cfg, app.Options{Signer: switchSigner, Logger: log})
@@ -299,4 +299,11 @@ func (c *tenantClient) status(txnID string) map[string]any {
 
 func merchant(id string) map[string]string {
 	return map[string]string{"id": id, "name": "Chai Point " + id, "mcc": "5812"}
+}
+
+// errCode is the machine code of an API error response.
+func errCode(r resp) string {
+	e, _ := r.Body["error"].(map[string]any)
+	c, _ := e["code"].(string)
+	return c
 }

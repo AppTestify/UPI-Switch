@@ -4,13 +4,12 @@ import (
 	"cmp"
 	"math"
 	"net/http"
-	"slices"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/AppTestify/UPI-Switch/internal/core"
 	"github.com/AppTestify/UPI-Switch/internal/domain"
-	"github.com/AppTestify/UPI-Switch/internal/npci"
 	"github.com/AppTestify/UPI-Switch/internal/router"
 	"github.com/AppTestify/UPI-Switch/internal/store"
 )
@@ -42,12 +41,11 @@ type declineOut struct {
 	Kind   string `json:"kind"` // TD (technical, counts against the bank) or BD (business, the customer's doing)
 }
 
-// isTechnical classifies a decline the way NPCI reports it: technical declines (TD) are the
-// banks' or the network's doing; everything else is a business decline (BD) caused by the customer
-// or by the remitter's own rules. This is wider than the failover set in npci.IsTechnicalDecline.
-func isTechnical(code string) bool { return slices.Contains(technicalCodes, code) }
+// isTechnical classifies a decline the way NPCI reports it (technical vs business decline). It is wider
+// than npci.IsTechnicalDecline, which only decides failover.
+func isTechnical(code string) bool { return domain.IsTechnicalDecline(code) }
 
-var technicalCodes = []string{npci.CodeRemitterTimeout, npci.CodeBankDown, npci.CodeTechnical, "U91", "96", "U30", "U28", "BT"}
+var technicalCodes = domain.TechnicalDeclineCodes
 
 // ratio returns a/b rounded to four places, or 0.
 func ratio(a, b int64) float64 {
@@ -160,6 +158,11 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		deemed, stuck, disputes, dead, err = s.store.StatsOpenExceptions(ctx, f.TenantID)
 		return
 	})
+	var incidents, kycPending, tatBreached int64
+	run(func() (err error) {
+		incidents, kycPending, tatBreached, err = s.store.StatsCompliance(ctx, f.TenantID, core.TATDeadline(now, loc).AddDate(0, 0, -2*core.TATDays-1))
+		return
+	})
 	run(func() (err error) { psps, err = s.store.ListPSPs(ctx); return })
 	run(func() (err error) { tenants, err = s.store.ListTenants(ctx); return })
 	wg.Wait()
@@ -266,6 +269,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		"psps":    pspOut, "tenants": group(byTenant, true), "types": group(byType, false), "declines": declineList,
 		"live": map[string]any{"tps": math.Round(float64(lastMin.Count)/60*100) / 100, "last_minute": lastMin.Count,
 			"success_rate_15m": ratio(last15.Success, last15.Success+last15.Failed), "count_15m": last15.Count},
-		"open": map[string]int64{"deemed": deemed, "stuck_pending": stuck, "disputes": disputes, "dead_webhooks": dead},
+		"open": map[string]int64{"deemed": deemed, "stuck_pending": stuck, "disputes": disputes, "dead_webhooks": dead,
+			"bank_incidents": incidents, "kyc_pending": kycPending, "tat_breached": tatBreached},
 	})
 }

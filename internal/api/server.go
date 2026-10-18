@@ -96,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Admin console API (RBAC).
 	s.adminRoutes(mux)
+	s.complianceRoutes(mux)
 
 	// Operations.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })

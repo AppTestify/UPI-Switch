@@ -161,3 +161,14 @@ func (s *Store) StatsOpenExceptions(ctx context.Context, tenantID string) (deeme
 		Scan(&deemed, &stuck, &disputes, &deadHooks)
 	return
 }
+
+// StatsCompliance counts active bank incidents, merchants awaiting KYC and DEEMED payments created
+// before tatCutoff, which are past RBI's reversal deadline.
+func (s *Store) StatsCompliance(ctx context.Context, tenantID string, tatCutoff time.Time) (incidents, kycPending, tatBreached int64, err error) {
+	err = s.q.QueryRow(ctx, `SELECT
+		(SELECT COUNT(*) FROM bank_incidents WHERE status='ACTIVE'),
+		(SELECT COUNT(*) FROM merchants WHERE kyc_status='PENDING' AND status='ACTIVE' AND ($1='' OR tenant_id=$1)),
+		(SELECT COUNT(*) FROM transactions WHERE status='DEEMED' AND created_at < $2 AND ($1='' OR tenant_id=$1))`, tenantID, tatCutoff).
+		Scan(&incidents, &kycPending, &tatBreached)
+	return
+}

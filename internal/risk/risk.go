@@ -16,6 +16,8 @@ type Stats interface {
 	TenantVolumeSince(ctx context.Context, tenantID string, since time.Time) (int64, error)
 	// PayerCountSince counts payments by a tokenised payer VPA for the tenant since t.
 	PayerCountSince(ctx context.Context, tenantID, payerToken string, since time.Time) (int, error)
+	// PayerCategoryVolumeSince sums a payer's non-failed payments to the given MCCs (nil = all) since t, across tenants.
+	PayerCategoryVolumeSince(ctx context.Context, payerToken string, mccs []string, since time.Time) (int64, error)
 }
 
 // Check is the input to a risk decision.
@@ -24,6 +26,7 @@ type Check struct {
 	AmountPaise int64
 	MCC         string
 	PayerToken  string // empty for intent/QR where the payer is unknown at creation
+	Verified    bool   // the merchant passed KYC, so NPCI's higher category limits apply
 }
 
 // Decision is the engine's verdict.
@@ -57,6 +60,14 @@ func (e *Engine) Evaluate(ctx context.Context, c Check) (Decision, error) {
 	if l.MaxTxnPaise > 0 && c.AmountPaise > l.MaxTxnPaise {
 		return deny("max_amount", "amount above tenant per-transaction limit %s", domain.FormatAmount(l.MaxTxnPaise)), nil
 	}
+	cat := domain.LimitsFor(c.MCC, c.Verified)
+	if c.AmountPaise > cat.TxnPaise {
+		if !c.Verified && domain.CategoryFor(c.MCC).TxnPaise > cat.TxnPaise {
+			return deny("npci_category_limit", "amount above NPCI's %s limit for merchants without completed KYC (%s %s limit needs KYC)",
+				domain.FormatAmount(cat.TxnPaise), domain.FormatAmount(domain.CategoryFor(c.MCC).TxnPaise), domain.CategoryFor(c.MCC).Name), nil
+		}
+		return deny("npci_category_limit", "amount above NPCI's per-transaction limit of %s for %s", domain.FormatAmount(cat.TxnPaise), cat.Name), nil
+	}
 	if c.MCC != "" && (slices.Contains(l.BlockedMCC, c.MCC) || slices.Contains(e.GlobalMCC, c.MCC)) {
 		return deny("mcc", "merchant category %s is blocked", c.MCC), nil
 	}
@@ -77,6 +88,17 @@ func (e *Engine) Evaluate(ctx context.Context, c Check) (Decision, error) {
 		}
 		if vol+c.AmountPaise > l.DailyPaise {
 			return deny("daily_limit", "tenant daily limit %s would be exceeded", domain.FormatAmount(l.DailyPaise)), nil
+		}
+	}
+	if c.PayerToken != "" {
+		lt := now.In(loc)
+		dayStart := time.Date(lt.Year(), lt.Month(), lt.Day(), 0, 0, 0, 0, loc)
+		vol, err := e.Stats.PayerCategoryVolumeSince(ctx, c.PayerToken, cat.MCCList(), dayStart)
+		if err != nil {
+			return Decision{}, err
+		}
+		if vol+c.AmountPaise > cat.DailyPaise {
+			return deny("npci_daily_limit", "customer would exceed NPCI's daily limit of %s for %s", domain.FormatAmount(cat.DailyPaise), cat.Name), nil
 		}
 	}
 	if c.PayerToken != "" && l.VelocityPerVPA > 0 {

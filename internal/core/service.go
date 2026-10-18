@@ -24,13 +24,17 @@ import (
 
 // Config tunes the orchestrator.
 type Config struct {
-	OrgID            string        // 3-letter org prefix for txn ids and message heads
-	IntentExpiry     time.Duration // validity of an intent / dynamic QR
-	CollectExpiry    time.Duration // how long the payer has to approve a collect
-	FirstCheckAfter  time.Duration // no callback within this → ReqChkTxn
-	MaxBackoff       time.Duration // cap on the poll backoff
-	MaxCheckAttempts int           // after this many inconclusive checks a PENDING txn becomes DEEMED
-	CallbackMaxSkew  time.Duration // replay window for bank callbacks
+	OrgID             string         // 3-letter org prefix for txn ids and message heads
+	IntentExpiry      time.Duration  // validity of an intent / dynamic QR
+	CollectExpiry     time.Duration  // how long the payer has to approve a collect
+	FirstCheckAfter   time.Duration  // no callback within this → ReqChkTxn (NPCI UPI-OC-215: 90 s)
+	MaxBackoff        time.Duration  // cap on the poll backoff
+	MaxCheckAttempts  int            // after this many inconclusive checks a PENDING txn becomes DEEMED (NPCI: 3)
+	CheckWindow       time.Duration  // all status checks happen within this window of the payment (NPCI: 2 h)
+	CallbackMaxSkew   time.Duration  // replay window for bank callbacks
+	PreDebitNotice    time.Duration  // AutoPay: notify the payer at least this long before a debit (RBI: 24 h)
+	AllowPeakMandates bool           // skip NPCI's no-AutoPay-in-peak-hours rule (tests only)
+	Location          *time.Location // business time zone (IST) for peak hours and debit dates
 }
 
 func (c *Config) defaults() {
@@ -44,13 +48,22 @@ func (c *Config) defaults() {
 		c.CollectExpiry = 15 * time.Minute
 	}
 	if c.FirstCheckAfter <= 0 {
-		c.FirstCheckAfter = 60 * time.Second
+		c.FirstCheckAfter = 90 * time.Second
 	}
 	if c.MaxBackoff <= 0 {
 		c.MaxBackoff = 10 * time.Minute
 	}
 	if c.MaxCheckAttempts <= 0 {
-		c.MaxCheckAttempts = 6
+		c.MaxCheckAttempts = 3
+	}
+	if c.CheckWindow <= 0 {
+		c.CheckWindow = 2 * time.Hour
+	}
+	if c.PreDebitNotice < 0 {
+		c.PreDebitNotice = 0
+	}
+	if c.Location == nil {
+		c.Location = time.UTC
 	}
 	if c.CallbackMaxSkew <= 0 {
 		c.CallbackMaxSkew = 5 * time.Minute

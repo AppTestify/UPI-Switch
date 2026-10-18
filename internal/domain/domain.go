@@ -198,6 +198,7 @@ type Limits struct {
 	VelocityWindowSecs int      `json:"velocity_window_secs"`
 	BlockedMCC         []string `json:"blocked_mcc"`
 	RateLimitPerSec    int      `json:"rate_limit_per_sec"`
+	RequireKYC         bool     `json:"require_kyc"` // refuse payments to merchants whose KYC is still pending
 }
 
 // Routing are per-tenant sponsor-bank routing rules.

@@ -161,7 +161,7 @@ func (s *Store) UpdateTxn(ctx context.Context, t *domain.Txn, u TxnUpdate, sourc
 	if err != nil {
 		return mapErr(err)
 	}
-	if t.Status != from {
+	if t.Status != from || detail != "" {
 		return s.AddEvent(ctx, t.ID, string(from), string(t.Status), source, detail)
 	}
 	return nil
@@ -183,6 +183,7 @@ type TxnFilter struct {
 	PSPID    string
 	Type     string
 	Query    string // exact txn id, merchant ref or RRN
+	Merchant string
 	From, To time.Time
 	Limit    int
 	Offset   int
@@ -190,7 +191,8 @@ type TxnFilter struct {
 
 const txnFilterWhere = ` WHERE ($1='' OR tenant_id=$1) AND ($2='' OR status=$2)
 		AND ($3::timestamptz IS NULL OR created_at >= $3) AND ($4::timestamptz IS NULL OR created_at < $4)
-		AND ($5='' OR psp_id=$5) AND ($6='' OR type=$6) AND ($7='' OR id=$7 OR merchant_ref=$7 OR rrn=$7)`
+		AND ($5='' OR psp_id=$5) AND ($6='' OR type=$6) AND ($7='' OR id=$7 OR merchant_ref=$7 OR rrn=$7)
+		AND ($8='' OR merchant_id=$8)`
 
 func (f TxnFilter) args() []any {
 	var from, to *time.Time
@@ -200,7 +202,7 @@ func (f TxnFilter) args() []any {
 	if !f.To.IsZero() {
 		to = &f.To
 	}
-	return []any{f.TenantID, f.Status, from, to, f.PSPID, f.Type, f.Query}
+	return []any{f.TenantID, f.Status, from, to, f.PSPID, f.Type, f.Query, f.Merchant}
 }
 
 // ListTxns lists txns for reports and the admin console.
@@ -211,7 +213,7 @@ func (s *Store) ListTxns(ctx context.Context, f TxnFilter) ([]*domain.Txn, error
 	if f.Offset < 0 {
 		f.Offset = 0
 	}
-	q := `SELECT ` + txnCols + ` FROM transactions` + txnFilterWhere + ` ORDER BY created_at DESC LIMIT $8 OFFSET $9`
+	q := `SELECT ` + txnCols + ` FROM transactions` + txnFilterWhere + ` ORDER BY created_at DESC LIMIT $9 OFFSET $10`
 	return scanTxns(s.q.Query(ctx, q, append(f.args(), f.Limit, f.Offset)...))
 }
 

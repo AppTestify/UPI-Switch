@@ -11,6 +11,7 @@ import (
 type fakeStats struct {
 	volume int64
 	count  int
+	payer  int64
 }
 
 func (f fakeStats) TenantVolumeSince(context.Context, string, time.Time) (int64, error) {
@@ -18,6 +19,9 @@ func (f fakeStats) TenantVolumeSince(context.Context, string, time.Time) (int64,
 }
 func (f fakeStats) PayerCountSince(context.Context, string, string, time.Time) (int, error) {
 	return f.count, nil
+}
+func (f fakeStats) PayerCategoryVolumeSince(context.Context, string, []string, time.Time) (int64, error) {
+	return f.payer, nil
 }
 
 func TestRules(t *testing.T) {
@@ -36,6 +40,38 @@ func TestRules(t *testing.T) {
 		{"daily", fakeStats{volume: 49900}, Check{AmountPaise: 500}, "daily_limit"},
 		{"velocity", fakeStats{count: 3}, Check{AmountPaise: 500, PayerToken: "p"}, "velocity"},
 		{"velocity ignores unknown payer", fakeStats{count: 3}, Check{AmountPaise: 500}, ""},
+	}
+	for _, c := range cases {
+		c.check.Tenant = tenant
+		e := &Engine{Stats: c.stats, GlobalMCC: []string{"6051"}}
+		d, err := e.Evaluate(context.Background(), c.check)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Rule != c.rule || d.Allow != (c.rule == "") {
+			t.Errorf("%s: got %+v, want rule %q", c.name, d, c.rule)
+		}
+	}
+}
+
+// NPCI category limits: ₹1 lakh unless the merchant passed KYC and its MCC has a higher limit.
+func TestNPCICategoryLimits(t *testing.T) {
+	tenant := &domain.Tenant{ID: "t"}
+	const lakh = 100_000 * 100
+	cases := []struct {
+		name  string
+		stats fakeStats
+		check Check
+		rule  string
+	}{
+		{"general at the limit", fakeStats{}, Check{AmountPaise: lakh, MCC: "5411", Verified: true}, ""},
+		{"general above the limit", fakeStats{}, Check{AmountPaise: lakh + 1, MCC: "5411", Verified: true}, "npci_category_limit"},
+		{"insurance verified", fakeStats{}, Check{AmountPaise: 4 * lakh, MCC: "6300", Verified: true}, ""},
+		{"insurance without KYC", fakeStats{}, Check{AmountPaise: 4 * lakh, MCC: "6300"}, "npci_category_limit"},
+		{"airline MCC range", fakeStats{}, Check{AmountPaise: 3 * lakh, MCC: "3012", Verified: true}, ""},
+		{"jewellery", fakeStats{}, Check{AmountPaise: 3 * lakh, MCC: "5944", Verified: true}, "npci_category_limit"},
+		{"customer daily limit", fakeStats{payer: 9 * lakh}, Check{AmountPaise: 2 * lakh, MCC: "6211", Verified: true, PayerToken: "p"}, "npci_daily_limit"},
+		{"daily limit needs a payer", fakeStats{payer: 9 * lakh}, Check{AmountPaise: 2 * lakh, MCC: "6211", Verified: true}, ""},
 	}
 	for _, c := range cases {
 		e := &Engine{Stats: c.stats, GlobalMCC: []string{"6051"}}

@@ -133,7 +133,8 @@ func New(ctx context.Context, cfg config.Switch, opt Options) (*App, error) {
 	m := metrics.New()
 	rt := router.New(nil)
 	svc := core.New(core.Config{
-		OrgID: cfg.OrgID, IntentExpiry: cfg.IntentExpiry, FirstCheckAfter: cfg.FirstCheckAfter, MaxCheckAttempts: cfg.MaxCheckAttempts,
+		OrgID: cfg.OrgID, IntentExpiry: cfg.IntentExpiry, FirstCheckAfter: cfg.FirstCheckAfter, MaxCheckAttempts: cfg.MaxCheckAttempts, CheckWindow: cfg.CheckWindow,
+		PreDebitNotice: cfg.PreDebitNotice, AllowPeakMandates: cfg.AllowPeakMandates, Location: loc,
 	}, core.Deps{
 		Store: st, Signer: signer, Vault: vault, Router: rt, HTTP: bankHTTP, Logger: log, Metrics: m,
 		Risk: &risk.Engine{Stats: st, GlobalMCC: cfg.BlockedMCC, Location: loc},
@@ -181,6 +182,7 @@ func (a *App) Start(ctx context.Context) {
 	go a.Service.RunPoller(ctx, a.Cfg.PollEvery)
 	go a.Dispatcher.Run(ctx, a.Cfg.WebhookEvery)
 	go a.Service.RunHeartbeat(ctx, a.Cfg.HeartbeatEvery)
+	go a.Service.RunIncidentMonitor(ctx, 30*time.Second)
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
@@ -253,7 +255,8 @@ func bankClient(cfg config.Switch) (*http.Client, error) {
 		}
 		tr.TLSClientConfig = tc
 	}
-	return &http.Client{Timeout: 10 * time.Second, Transport: tr}, nil
+	// Per-API deadlines (npci.Timeout) apply through the request context; this is only a backstop.
+	return &http.Client{Timeout: 30 * time.Second, Transport: tr}, nil
 }
 
 // ServerTLS builds the listener TLS config; with TLS_CLIENT_CA set, client certificates are verified (mTLS).

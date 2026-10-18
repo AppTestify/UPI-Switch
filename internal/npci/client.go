@@ -40,6 +40,16 @@ type Client struct {
 	HTTP   *http.Client
 }
 
+// Timeout is the response deadline NPCI sets for an API (UPI-OC-214 FY25-26, from 16 Jun 2025):
+// 15 s for payments, 10 s for status checks, address validation and other synchronous lookups.
+func Timeout(api string) time.Duration {
+	switch api {
+	case APIReqPay, APIReqMandate, APIReqComplaint:
+		return 15 * time.Second
+	}
+	return 10 * time.Second
+}
+
 // Exchange posts the signed message to {endpoint}/upi/{API} and returns the verified response message.
 // Async APIs (ReqPay, ReqMandate, ReqComplaint) get an Ack; sync APIs get their Resp* message.
 func (c *Client) Exchange(ctx context.Context, peer Peer, m *Message) (*Message, error) {
@@ -50,6 +60,8 @@ func (c *Client) Exchange(ctx context.Context, peer Peer, m *Message) (*Message,
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, Timeout(m.API()))
+	defer cancel()
 	url := strings.TrimRight(peer.Endpoint, "/") + "/upi/" + m.API()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -58,7 +70,7 @@ func (c *Client) Exchange(ctx context.Context, peer Peer, m *Message) (*Message,
 	req.Header.Set("Content-Type", "application/xml")
 	hc := c.HTTP
 	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
+		hc = http.DefaultClient
 	}
 	resp, err := hc.Do(req)
 	if err != nil {

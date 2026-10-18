@@ -102,7 +102,7 @@ func main() {
 		tn := &domain.Tenant{ID: t.ID, Name: t.Name, Status: "ACTIVE", APIKeyID: "ak_" + security.RandomToken(10),
 			HMACSecret: security.RandomToken(32), WebhookURL: *hook, WebhookSecret: "whsec_" + security.RandomToken(24),
 			VPAPrefix: t.Prefix, FeeBps: t.FeeBps,
-			Limits: domain.Limits{MaxTxnPaise: 100000_00, VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500}}
+			Limits: domain.Limits{VelocityPerVPA: 10, VelocityWindowSecs: 600, RateLimitPerSec: 500}}
 		if _, err := st.GetTenant(ctx, t.ID); err == nil {
 			continue // left by an interrupted run
 		}
