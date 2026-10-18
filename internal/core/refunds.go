@@ -18,6 +18,7 @@ type RefundRequest struct {
 	MerchantRefundRef string `json:"merchant_refund_ref"`
 	Amount            string `json:"amount"`
 	Mode              string `json:"mode"` // ONLINE (default) | OFFLINE
+	Actor             string `json:"-"`    // who asked, for the audit log (defaults to the gateway)
 }
 
 // CreateRefund validates against the original payment and refunded total, then executes online
@@ -77,7 +78,11 @@ func (s *Service) CreateRefund(ctx context.Context, t *domain.Tenant, req Refund
 			}
 			return err
 		}
-		return tx.Audit(ctx, "tenant:"+t.ID, "refund.create", "refund", r.ID, map[string]any{"txn_id": txn.ID, "amount": domain.FormatAmount(amt), "mode": mode})
+		actor := req.Actor
+		if actor == "" {
+			actor = "tenant:" + t.ID
+		}
+		return tx.Audit(ctx, actor, "refund.create", "refund", r.ID, map[string]any{"txn_id": txn.ID, "amount": domain.FormatAmount(amt), "mode": mode})
 	})
 	if err != nil {
 		return nil, err

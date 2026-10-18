@@ -217,6 +217,17 @@ func TestSwitchEndToEnd(t *testing.T) {
 		if over := pg.post("/v1/upi/mandate/"+mid+"/execute", map[string]any{"merchant_ref": "MND-1-X", "amount": "1000.00"}); over.Code != 422 {
 			t.Fatalf("over mandate max: %d", over.Code)
 		}
+		// RBI: no AutoPay debit without a pre-debit notification, and never above the notified amount.
+		if ex := pg.post("/v1/upi/mandate/"+mid+"/execute", map[string]any{"merchant_ref": "MND-1-EARLY", "amount": "499.00"}); errCode(ex) != "pre_debit_notice_required" {
+			t.Fatalf("debit without notice: %d %s", ex.Code, ex.Raw)
+		}
+		n := pg.post("/v1/upi/mandate/"+mid+"/notify", map[string]any{"amount": "499.00", "debit_date": today})
+		if n.Code != 201 || n.Body["seq"].(float64) != 1 || n.Body["status"] != "NOTIFIED" {
+			t.Fatalf("notify: %d %s", n.Code, n.Raw)
+		}
+		if ex := pg.post("/v1/upi/mandate/"+mid+"/execute", map[string]any{"merchant_ref": "MND-1-MORE", "amount": "500.00"}); errCode(ex) != "exceeds_notified_amount" {
+			t.Fatalf("debit above notice: %d %s", ex.Code, ex.Raw)
+		}
 		ex := pg.post("/v1/upi/mandate/"+mid+"/execute", map[string]any{"merchant_ref": "MND-1-OCT", "amount": "499.00"})
 		if ex.Code != 201 {
 			t.Fatalf("execute: %d %s", ex.Code, ex.Raw)
@@ -224,6 +235,15 @@ func TestSwitchEndToEnd(t *testing.T) {
 		h.settle()
 		if txn := pg.status(ex.Body["txn_id"].(string)); txn["status"] != "SUCCESS" || txn["type"] != "MANDATE_DEBIT" {
 			t.Fatalf("mandate debit: %v", txn)
+		}
+		// The notification is used up; the next debit needs a new one.
+		if again := pg.post("/v1/upi/mandate/"+mid+"/execute", map[string]any{"merchant_ref": "MND-1-AGAIN", "amount": "499.00"}); errCode(again) != "pre_debit_notice_required" {
+			t.Fatalf("second debit on one notice: %d %s", again.Code, again.Raw)
+		}
+		detail := h.admin("GET", "/admin/mandates/"+mid, nil)
+		notes := detail.Body["notifications"].([]any)
+		if detail.Code != 200 || len(notes) != 1 || notes[0].(map[string]any)["status"] != "EXECUTED" || detail.Body["mandate"].(map[string]any)["debits"].(float64) != 1 {
+			t.Fatalf("mandate detail: %s", detail.Raw)
 		}
 		if rv := pg.post("/v1/upi/mandate/"+mid+"/revoke", nil); rv.Body["status"] != "REVOKED" {
 			t.Fatalf("revoke: %s", rv.Raw)
@@ -400,6 +420,229 @@ func TestSwitchEndToEnd(t *testing.T) {
 		}
 		if c := h.do("GET", "/admin/", nil, nil); c.Code != 200 || !strings.Contains(string(c.Raw), "UPI Switch Console") {
 			t.Fatalf("console: %d", c.Code)
+		}
+	})
+
+	t.Run("console sign-in, session RBAC and analytics", func(t *testing.T) {
+		if r := h.do("POST", "/admin/login", map[string]string{"email": "ops@example.com", "password": "wrong-password"}, nil); r.Code != 401 {
+			t.Fatalf("bad password: %d", r.Code)
+		}
+		time.Sleep(400 * time.Millisecond) // sign-in attempts are rate limited per IP
+		login := h.do("POST", "/admin/login", map[string]string{"email": "OPS@example.com", "password": consolePassword}, nil)
+		if login.Code != 200 || login.Body["role"] != "ops" {
+			t.Fatalf("login: %d %s", login.Code, login.Raw)
+		}
+		var cookie string
+		for _, c := range login.Header.Values("Set-Cookie") {
+			if strings.HasPrefix(c, "atf_session=") {
+				cookie, _, _ = strings.Cut(c, ";")
+				if !strings.Contains(c, "HttpOnly") || !strings.Contains(c, "SameSite=Strict") {
+					t.Fatalf("cookie flags: %s", c)
+				}
+			}
+		}
+		if cookie == "" {
+			t.Fatal("no session cookie")
+		}
+		sess := map[string]string{"Cookie": cookie}
+		if me := h.do("GET", "/admin/me", nil, sess); me.Code != 200 || me.Body["email"] != "ops@example.com" {
+			t.Fatalf("me: %d %s", me.Code, me.Raw)
+		}
+		if r := h.do("GET", "/admin/me", nil, map[string]string{"Cookie": cookie + "x"}); r.Code != 401 {
+			t.Fatalf("tampered cookie: %d", r.Code)
+		}
+		// A cookie-authenticated write without the console header is refused (CSRF), with it the ops role applies.
+		if r := h.do("POST", "/admin/webhooks/1/replay", nil, sess); r.Code != 403 {
+			t.Fatalf("csrf: %d", r.Code)
+		}
+		sess["X-ATF-Console"] = "1"
+		if r := h.do("POST", "/admin/tenants", map[string]any{"name": "x", "vpa_prefix": "xx"}, sess); r.Code != 403 {
+			t.Fatalf("ops must not onboard tenants: %d", r.Code)
+		}
+
+		ov := h.do("GET", "/admin/stats/overview?range=today", nil, sess)
+		if ov.Code != 200 {
+			t.Fatalf("overview: %d %s", ov.Code, ov.Raw)
+		}
+		tot := ov.Body["totals"].(map[string]any)
+		if tot["count"].(float64) < 5 || tot["success"].(float64) < 1 || ov.Body["success_rate"].(float64) <= 0 {
+			t.Fatalf("overview totals: %s", ov.Raw)
+		}
+		if len(ov.Body["series"].([]any)) == 0 || len(ov.Body["psps"].([]any)) != 2 || len(ov.Body["tenants"].([]any)) == 0 {
+			t.Fatalf("overview breakdowns: %s", ov.Raw)
+		}
+		var sum float64
+		for _, b := range ov.Body["series"].([]any) {
+			sum += b.(map[string]any)["count"].(float64)
+		}
+		if sum != tot["count"].(float64) {
+			t.Fatalf("series sums to %v, totals say %v", sum, tot["count"])
+		}
+		for _, d := range ov.Body["declines"].([]any) {
+			d := d.(map[string]any)
+			if (d["code"] == "Z9" && d["kind"] != "BD") || (d["code"] == "U90" && d["kind"] != "TD") {
+				t.Fatalf("decline classification: %v", d)
+			}
+		}
+
+		found := h.do("GET", "/admin/txns?q="+intentTxn, nil, sess)
+		if found.Code != 200 || found.Body["total"].(float64) != 1 || found.Body["transactions"].([]any)[0].(map[string]any)["txn_id"] != intentTxn {
+			t.Fatalf("search: %s", found.Raw)
+		}
+		page := h.do("GET", "/admin/txns?limit=2&offset=1&tenant="+pg.tenantID, nil, sess)
+		if page.Code != 200 || len(page.Body["transactions"].([]any)) != 2 || page.Body["total"].(float64) < 3 {
+			t.Fatalf("paging: %s", page.Raw)
+		}
+		// Reconciliation on uploaded files can turn deemed payments into successes: admins only.
+		if r := h.do("POST", "/admin/recon/run", map[string]any{"date": today, "bank_csv": "rrn,status,amount\n", "npci_csv": "rrn,status,amount\n"}, sess); r.Code != 403 {
+			t.Fatalf("ops recon with uploaded files: %d %s", r.Code, r.Raw)
+		}
+		if r := h.do("POST", "/admin/logout", nil, sess); r.Code != 204 || !strings.Contains(r.Header.Get("Set-Cookie"), "Max-Age=0") {
+			t.Fatalf("logout: %d %v", r.Code, r.Header)
+		}
+		// Sessions live server-side: a copy of the cookie stops working once the user signs out.
+		if r := h.do("GET", "/admin/me", nil, sess); r.Code != 401 {
+			t.Fatalf("cookie still valid after logout: %d", r.Code)
+		}
+	})
+
+	t.Run("console account lockout and security headers", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			time.Sleep(400 * time.Millisecond) // stay under the per-IP rate limit
+			if r := h.do("POST", "/admin/login", map[string]string{"email": "viewer@example.com", "password": "wrong-password"}, nil); r.Code != 401 {
+				t.Fatalf("bad password %d: %d", i, r.Code)
+			}
+		}
+		time.Sleep(400 * time.Millisecond)
+		if r := h.do("POST", "/admin/login", map[string]string{"email": "viewer@example.com", "password": consolePassword}, nil); r.Code != 429 || errCode(r) != "account_locked" {
+			t.Fatalf("locked account signed in: %d %s", r.Code, r.Raw)
+		}
+		c := h.do("GET", "/admin/", nil, nil)
+		if csp := c.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'sha256-") {
+			t.Fatalf("console CSP: %s", csp)
+		}
+		if c.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("nosniff: %v", c.Header)
+		}
+	})
+
+	t.Run("merchant KYC, NPCI category limits and collect rules", func(t *testing.T) {
+		ins := map[string]string{"id": "safehands", "name": "SafeHands", "mcc": "6300"}
+		reg := pg.post("/v1/upi/merchants", map[string]any{"merchant_id": "safehands", "legal_name": "SafeHands Insurance Brokers Pvt Ltd",
+			"display_name": "SafeHands", "mcc": "6300", "pan": "ABCPE1234F", "declared_monthly_volume": "500000.00"})
+		if reg.Code != 201 || reg.Body["kyc_status"] != "PENDING" || reg.Body["pan"] != "ABCXXXX34F" || reg.Body["mid"] == "" {
+			t.Fatalf("register merchant: %d %s", reg.Code, reg.Raw)
+		}
+		if dup := pg.post("/v1/upi/merchants", map[string]any{"merchant_id": "safehands", "legal_name": "x", "mcc": "6300", "pan": "ABCPE1234F"}); errCode(dup) != "merchant_exists" {
+			t.Fatalf("duplicate merchant: %d %s", dup.Code, dup.Raw)
+		}
+		// ₹2 lakh is above the ₹1 lakh limit until KYC unlocks the insurance limit of ₹5 lakh.
+		if r := pg.post("/v1/upi/intent", map[string]any{"merchant_ref": "INS-1", "amount": "200000.00", "merchant": ins}); errCode(r) != "risk_declined" ||
+			!strings.Contains(string(r.Raw), "npci_category_limit") {
+			t.Fatalf("pre-KYC limit: %d %s", r.Code, r.Raw)
+		}
+		v := h.admin("POST", "/admin/merchants/"+pg.tenantID+"/safehands/decision", map[string]any{"action": "verify", "method": "PAN", "ref": "PAN-VERIFY-1"})
+		if v.Code != 200 || v.Body["kyc_status"] != "VERIFIED" || v.Body["limits"].(map[string]any)["txn_limit"] != "500000.00" {
+			t.Fatalf("verify: %d %s", v.Code, v.Raw)
+		}
+		ok := pg.post("/v1/upi/intent", map[string]any{"merchant_ref": "INS-2", "amount": "200000.00", "merchant": ins})
+		if ok.Code != 201 || ok.Body["payee_name"] != "SafeHands Insurance Brokers Pvt Ltd" {
+			t.Fatalf("verified merchant: %d %s", ok.Code, ok.Raw)
+		}
+		if r := pg.post("/v1/upi/intent", map[string]any{"merchant_ref": "INS-3", "amount": "500000.01", "merchant": ins}); errCode(r) != "risk_declined" {
+			t.Fatalf("category limit: %d %s", r.Code, r.Raw)
+		}
+		if r := pg.post("/v1/upi/intent", map[string]any{"merchant_ref": "INS-4", "amount": "10.00", "merchant": map[string]string{"id": "safehands", "name": "SafeHands", "mcc": "5812"}}); errCode(r) != "mcc_mismatch" {
+			t.Fatalf("mcc mismatch: %d %s", r.Code, r.Raw)
+		}
+		if r := h.admin("POST", "/admin/merchants/"+pg.tenantID+"/safehands/decision", map[string]any{"action": "suspend", "remarks": "chargeback spike"}); r.Code != 200 {
+			t.Fatalf("suspend: %d %s", r.Code, r.Raw)
+		}
+		if r := pg.post("/v1/upi/intent", map[string]any{"merchant_ref": "INS-5", "amount": "10.00", "merchant": ins}); errCode(r) != "merchant_suspended" {
+			t.Fatalf("suspended merchant: %d %s", r.Code, r.Raw)
+		}
+		h.settle()
+		if h.hooks.find("merchant.kyc_verified", "safehands") == nil || h.hooks.find("merchant.suspended", "safehands") == nil {
+			t.Fatal("merchant webhooks missing")
+		}
+		// Merchants seen only on payments are registered for review with KYC pending.
+		list := h.admin("GET", "/admin/merchants?tenant="+pg.tenantID, nil)
+		if list.Code != 200 || list.Body["counts"].(map[string]any)["PENDING"].(float64) < 1 || list.Body["counts"].(map[string]any)["SUSPENDED"].(float64) != 1 {
+			t.Fatalf("merchant list: %s", list.Raw)
+		}
+		if r := pg.post("/v1/upi/collect", map[string]any{"merchant_ref": "P2P-1", "amount": "5.00", "payer_vpa": "bob@okhdfc",
+			"merchant": map[string]string{"id": "friend", "name": "A Friend", "mcc": "0000"}}); errCode(r) != "p2p_collect_not_allowed" {
+			t.Fatalf("p2p collect: %d %s", r.Code, r.Raw)
+		}
+		if r := pg.post("/v1/upi/collect", map[string]any{"merchant_ref": "UNREG-1", "amount": "5.00", "payer_vpa": "bob@okhdfc",
+			"merchant": map[string]string{"id": "madeup", "name": "Made Up", "mcc": "5411"}}); errCode(r) != "merchant_not_registered" {
+			t.Fatalf("collect for an unregistered merchant: %d %s", r.Code, r.Raw)
+		}
+		rules := h.admin("GET", "/admin/compliance/rules", nil)
+		if rules.Code != 200 || rules.Body["status_checks"].(map[string]any)["max_checks"].(float64) != 2 {
+			t.Fatalf("rules: %s", rules.Raw)
+		}
+	})
+
+	t.Run("status checks follow NPCI limits; console refunds, downtime and RBI turnaround", func(t *testing.T) {
+		if r := h.admin("POST", "/admin/txns/"+intentTxn+"/check", nil); errCode(r) != "txn_final" {
+			t.Fatalf("check on a final txn: %d %s", r.Code, r.Raw)
+		}
+		// A DEEMED payment used up its status checks; the timeline shows each one.
+		tl := h.admin("GET", "/admin/txns/"+lostTxn, nil)
+		checks := 0
+		for _, e := range tl.Body["events"].([]any) {
+			if strings.HasPrefix(e.(map[string]any)["source"].(string), "chktxn ") {
+				checks++
+			}
+		}
+		if checks != 2 {
+			t.Fatalf("expected 2 status checks on the timeline: %s", tl.Raw)
+		}
+
+		rf := h.admin("POST", "/admin/refunds", map[string]any{"txn_id": collectTxn, "amount": "1.00", "reason": "goodwill"})
+		if rf.Code != 201 {
+			t.Fatalf("console refund: %d %s", rf.Code, rf.Raw)
+		}
+		if r := h.admin("POST", "/admin/refunds", map[string]any{"txn_id": collectTxn, "amount": "1.00"}); r.Code != 400 {
+			t.Fatalf("console refund needs a reason: %d", r.Code)
+		}
+		h.settle()
+		refunds := h.admin("GET", "/admin/refunds?tenant="+pg.tenantID, nil)
+		if refunds.Code != 200 || refunds.Body["total"].(float64) < 3 {
+			t.Fatalf("refund list: %s", refunds.Raw)
+		}
+
+		h.app.Service.Router().Record("bank-a", 0, true, "connection refused")
+		h.app.Service.Router().Record("bank-a", 0, true, "connection refused")
+		h.app.Service.Router().Record("bank-a", 0, true, "connection refused")
+		if err := h.app.Service.MonitorBanksOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		dt := pg.get("/v1/upi/downtimes")
+		if dt.Code != 200 || len(dt.Body["downtimes"].([]any)) != 1 || dt.Body["downtimes"].([]any)[0].(map[string]any)["status"] != "ACTIVE" {
+			t.Fatalf("downtime: %s", dt.Raw)
+		}
+		h.app.Service.Router().Record("bank-a", time.Millisecond, false, "")
+		if err := h.app.Service.MonitorBanksOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		h.settle()
+		if h.hooks.find("bank.downtime.started", "bank-a") == nil || h.hooks.find("bank.downtime.resolved", "bank-a") == nil {
+			t.Fatal("downtime webhooks missing")
+		}
+		inc := h.admin("GET", "/admin/incidents", nil)
+		if inc.Body["incidents"].([]any)[0].(map[string]any)["status"] != "RESOLVED" {
+			t.Fatalf("incident should be resolved: %s", inc.Raw)
+		}
+
+		tat := h.admin("GET", "/admin/compliance/tat", nil)
+		if tat.Code != 200 || tat.Body["counts"].(map[string]any)["RESOLVED_IN_TAT"].(float64) < 2 || tat.Body["compensation"] != "0.00" {
+			t.Fatalf("tat: %s", tat.Raw)
+		}
+		ov := h.admin("GET", "/admin/stats/overview?range=today", nil)
+		if open := ov.Body["open"].(map[string]any); open["kyc_pending"].(float64) < 1 || open["bank_incidents"].(float64) != 0 {
+			t.Fatalf("overview compliance counts: %v", open)
 		}
 	})
 }

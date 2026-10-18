@@ -29,8 +29,9 @@ import (
 )
 
 const (
-	adminToken  = "admin-token-0123456789"
-	viewerToken = "viewer-token-0123456789"
+	adminToken      = "admin-token-0123456789"
+	viewerToken     = "viewer-token-0123456789"
+	consolePassword = "console-pass-123"
 )
 
 type harness struct {
@@ -81,7 +82,7 @@ func (rc *receiver) find(typ, entityID string) map[string]any {
 			continue
 		}
 		d, _ := e["data"].(map[string]any)
-		for _, k := range []string{"txn_id", "refund_id", "mandate_id", "dispute_id"} {
+		for _, k := range []string{"txn_id", "refund_id", "mandate_id", "dispute_id", "merchant_id", "psp_id"} {
 			if entityID == "" || d[k] == entityID {
 				return e
 			}
@@ -142,9 +143,10 @@ func newHarness(t *testing.T) *harness {
 
 	cfg := config.Switch{
 		DatabaseURL: dbURL, OrgID: "ATF", DataKey: "e2e-data-key",
-		AdminTokens: "root:admin:" + adminToken + ",audit:viewer:" + viewerToken,
-		ReconTZ:     "UTC", PollEvery: time.Hour, WebhookEvery: time.Hour, HeartbeatEvery: time.Hour,
-		FirstCheckAfter: 50 * time.Millisecond, IntentExpiry: 15 * time.Minute, MaxCheckAttempts: 2,
+		AdminTokens:  "root:admin:" + adminToken + ",audit:viewer:" + viewerToken,
+		ConsoleUsers: "ops@example.com:ops:" + consolePassword + ",viewer@example.com:viewer:" + consolePassword,
+		ReconTZ:      "UTC", PollEvery: time.Hour, WebhookEvery: time.Hour, HeartbeatEvery: time.Hour,
+		FirstCheckAfter: 50 * time.Millisecond, IntentExpiry: 15 * time.Minute, MaxCheckAttempts: 2, AllowPeakMandates: true,
 		BlockedMCC: []string{"6051"},
 	}
 	a, err := app.New(context.Background(), cfg, app.Options{Signer: switchSigner, Logger: log})
@@ -241,7 +243,8 @@ func (c *tenantClient) get(path string) resp { return c.call(http.MethodGet, pat
 
 func (h *harness) onboard(name, prefix, webhookURL string) *tenantClient {
 	h.t.Helper()
-	r := h.admin("POST", "/admin/tenants", map[string]any{"name": name, "vpa_prefix": prefix, "webhook_url": webhookURL, "fee_bps": 30})
+	r := h.admin("POST", "/admin/tenants", map[string]any{"name": name, "vpa_prefix": prefix, "webhook_url": webhookURL, "fee_bps": 30,
+		"require_kyc": false}) // most tests pay merchants registered on their first payment
 	if r.Code != http.StatusCreated {
 		h.t.Fatalf("onboard: %d %s", r.Code, r.Raw)
 	}
@@ -251,7 +254,16 @@ func (h *harness) onboard(name, prefix, webhookURL string) *tenantClient {
 		h.hooks.secret = r.Body["webhook_secret"].(string)
 		h.hooks.mu.Unlock()
 	}
-	return &tenantClient{h: h, keyID: r.Body["api_key_id"].(string), secret: r.Body["hmac_secret"].(string), tenantID: tn["tenant_id"].(string)}
+	tc := &tenantClient{h: h, keyID: r.Body["api_key_id"].(string), secret: r.Body["hmac_secret"].(string), tenantID: tn["tenant_id"].(string)}
+	// Collect and AutoPay need a merchant registered beforehand; the tests use these for pull payments.
+	for i, id := range []string{"m1", "m3", "ott"} {
+		m := merchant(id)
+		reg := tc.post("/v1/upi/merchants", map[string]any{"merchant_id": id, "legal_name": m["name"], "mcc": m["mcc"], "pan": fmt.Sprintf("ABCPE%04dF", 1000+i)})
+		if reg.Code != http.StatusCreated {
+			h.t.Fatalf("register merchant %s: %d %s", id, reg.Code, reg.Raw)
+		}
+	}
+	return tc
 }
 
 // settle waits for simulator callbacks, then drains the poller and the webhook outbox.
@@ -297,4 +309,11 @@ func (c *tenantClient) status(txnID string) map[string]any {
 
 func merchant(id string) map[string]string {
 	return map[string]string{"id": id, "name": "Chai Point " + id, "mcc": "5812"}
+}
+
+// errCode is the machine code of an API error response.
+func errCode(r resp) string {
+	e, _ := r.Body["error"].(map[string]any)
+	c, _ := e["code"].(string)
+	return c
 }

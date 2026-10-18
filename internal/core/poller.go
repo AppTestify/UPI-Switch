@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/AppTestify/UPI-Switch/internal/domain"
@@ -57,10 +58,53 @@ func (s *Service) chkTxn(ctx context.Context, pspID, id string) (*npci.Message, 
 	return s.exchange(ctx, pspID, m)
 }
 
-// CheckTxnNow runs a status check immediately (used by GET status?refresh=true and the admin console).
-func (s *Service) CheckTxnNow(ctx context.Context, t *domain.Txn) error { return s.checkTxn(ctx, t) }
+// CheckAllowed applies NPCI's status-check rules (UPI-OC-215 FY25-26) to an on-demand check: the first
+// ReqChkTxn no earlier than FirstCheckAfter (90 s) after the payment, at most MaxCheckAttempts (3) checks,
+// all within CheckWindow (2 h). Past that, the T+1 settlement file decides the outcome.
+func (s *Service) CheckAllowed(t *domain.Txn, now time.Time) error {
+	if t.Status != domain.StatusInitiated && t.Status != domain.StatusPending {
+		return errUnprocessable("txn_final", "transaction is already %s", t.Status)
+	}
+	if t.Status == domain.StatusInitiated && t.Type != domain.TypeCollect && t.Type != domain.TypeMandateDebit && now.Before(t.ExpiresAt) {
+		return errUnprocessable("awaiting_payer", "the customer has until %s to pay; there is nothing to check yet", t.ExpiresAt.Format(time.RFC3339))
+	}
+	if wait := t.CreatedAt.Add(s.cfg.FirstCheckAfter).Sub(now); wait > 0 {
+		return errUnprocessable("check_too_early", "NPCI allows the first status check %s after the payment; try again in %s",
+			s.cfg.FirstCheckAfter, wait.Round(time.Second))
+	}
+	if t.CheckAttempts >= s.cfg.MaxCheckAttempts {
+		return errUnprocessable("check_limit_reached", "NPCI allows %d status checks per payment and all have been used; the settlement file will confirm the outcome",
+			s.cfg.MaxCheckAttempts)
+	}
+	if now.Sub(t.CreatedAt) > s.cfg.CheckWindow {
+		return errUnprocessable("check_window_closed", "NPCI allows status checks only within %s of the payment; the settlement file will confirm the outcome", s.cfg.CheckWindow)
+	}
+	return nil
+}
+
+// CheckTxnNow runs a status check immediately (GET status?refresh=true and the admin console) when NPCI's rules allow one.
+func (s *Service) CheckTxnNow(ctx context.Context, t *domain.Txn) error {
+	if err := s.CheckAllowed(t, time.Now()); err != nil {
+		return err
+	}
+	return s.checkTxn(ctx, t)
+}
 
 func (s *Service) checkTxn(ctx context.Context, snapshot *domain.Txn) error {
+	now := time.Now()
+	// An intent or QR nobody has paid yet has nothing to check: NPCI treats such checks as API misuse.
+	// Wait until it expires, then check once whether a payment slipped through without a callback.
+	if snapshot.Status == domain.StatusInitiated && snapshot.Type != domain.TypeCollect && snapshot.Type != domain.TypeMandateDebit &&
+		now.Before(snapshot.ExpiresAt) {
+		return s.store.InTx(ctx, func(tx *store.Store) error {
+			t, err := tx.LockTxn(ctx, snapshot.ID)
+			if err != nil {
+				return err
+			}
+			next := t.ExpiresAt.Add(s.cfg.FirstCheckAfter)
+			return tx.UpdateTxn(ctx, t, store.TxnUpdate{NextCheckAt: &next}, "poller", "")
+		})
+	}
 	resp, chkErr := s.chkTxn(ctx, snapshot.PSPID, snapshot.ID)
 	return s.store.InTx(ctx, func(tx *store.Store) error {
 		t, err := tx.LockTxn(ctx, snapshot.ID)
@@ -83,22 +127,32 @@ func (s *Service) checkTxn(ctx context.Context, snapshot *domain.Txn) error {
 		} else if chkErr != nil {
 			s.log.Warn("ReqChkTxn failed", "txn", t.ID, "psp", t.PSPID, "err", chkErr)
 		}
+		source := fmt.Sprintf("chktxn %d/%d", attempts, s.cfg.MaxCheckAttempts)
 		switch result {
 		case npci.ResultSuccess, npci.ResultFailure, npci.ResultDeemed:
-			return s.applyPayment(ctx, tx, t, result, code, reasonFor(code), rrn, payer, "chktxn")
+			return s.applyPayment(ctx, tx, t, result, code, reasonFor(code), rrn, payer, source)
 		}
-		expired := now.After(t.ExpiresAt)
-		if result == npci.ResultNotFound && expired {
-			return s.applyPayment(ctx, tx, t, npci.ResultFailure, npci.CodeCollectExpired, "expired without payment", "", nil, "chktxn")
-		}
-		awaitingPayer := t.Status == domain.StatusInitiated && !expired
-		if !awaitingPayer && attempts >= s.cfg.MaxCheckAttempts {
-			return s.applyPayment(ctx, tx, t, npci.ResultDeemed, npci.CodeDeemed, "no final status after status checks", "", nil, "chktxn")
+		if result == npci.ResultNotFound && now.After(t.ExpiresAt) {
+			return s.applyPayment(ctx, tx, t, npci.ResultFailure, npci.CodeCollectExpired, "expired without payment", "", nil, source)
 		}
 		next := now.Add(s.backoff(attempts - 1))
+		awaitingPayer := t.Status == domain.StatusInitiated && now.Before(t.ExpiresAt)
 		if awaitingPayer && next.After(t.ExpiresAt) {
 			next = t.ExpiresAt.Add(time.Second)
 		}
-		return tx.UpdateTxn(ctx, t, store.TxnUpdate{NextCheckAt: &next, CheckAttempts: &attempts}, "poller", "")
+		if attempts >= s.cfg.MaxCheckAttempts || next.Sub(t.CreatedAt) > s.cfg.CheckWindow {
+			if awaitingPayer {
+				// A collect the payer hasn't approved yet: stop checking and let it expire.
+				exp := t.ExpiresAt.Add(time.Second)
+				return tx.UpdateTxn(ctx, t, store.TxnUpdate{NextCheckAt: &exp, CheckAttempts: &attempts}, source, "awaiting payer approval")
+			}
+			return s.applyPayment(ctx, tx, t, npci.ResultDeemed, npci.CodeDeemed,
+				fmt.Sprintf("no final status after %d status checks; the settlement file will confirm it", attempts), "", nil, source)
+		}
+		detail := "still pending"
+		if chkErr != nil {
+			detail = "bank did not answer the status check"
+		}
+		return tx.UpdateTxn(ctx, t, store.TxnUpdate{NextCheckAt: &next, CheckAttempts: &attempts}, source, detail)
 	})
 }

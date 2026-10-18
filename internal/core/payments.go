@@ -47,8 +47,8 @@ func (r IntentResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func (s *Service) checkRisk(ctx context.Context, t *domain.Tenant, amount int64, mcc, payerToken string) error {
-	d, err := s.risk.Evaluate(ctx, risk.Check{Tenant: t, AmountPaise: amount, MCC: mcc, PayerToken: payerToken})
+func (s *Service) checkRisk(ctx context.Context, t *domain.Tenant, amount int64, mcc, payerToken string, verified bool) error {
+	d, err := s.risk.Evaluate(ctx, risk.Check{Tenant: t, AmountPaise: amount, MCC: mcc, PayerToken: payerToken, Verified: verified})
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,11 @@ func (s *Service) CreateIntent(ctx context.Context, t *domain.Tenant, req Intent
 	if len(req.Note) > 50 {
 		return nil, errValidation("note must be at most 50 characters")
 	}
-	if err := s.checkRisk(ctx, t, amt, req.Merchant.MCC, ""); err != nil {
+	mer, err := s.merchantFor(ctx, t, req.Merchant, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.checkRisk(ctx, t, amt, req.Merchant.MCC, "", mer.Verified()); err != nil {
 		return nil, err
 	}
 	psps, err := s.router.Rank(t.Routing)
@@ -102,13 +106,13 @@ func (s *Service) CreateIntent(ctx context.Context, t *domain.Tenant, req Intent
 	}
 	txn := &domain.Txn{
 		ID: npci.NewTxnID(s.cfg.OrgID), TenantID: t.ID, MerchantRef: req.MerchantRef, Type: typ, Status: domain.StatusInitiated,
-		AmountPaise: amt, Currency: "INR", PayeeVPA: payeeVPA(t, req.Merchant.ID, psp.Handle), PayeeName: req.Merchant.Name,
+		AmountPaise: amt, Currency: "INR", PayeeVPA: payeeVPA(t, req.Merchant.ID, psp.Handle), PayeeName: payeeName(mer),
 		MerchantID: req.Merchant.ID, MCC: req.Merchant.MCC, Note: req.Note, PSPID: psp.ID,
-		ExpiresAt: now.Add(expiry), NextCheckAt: ptr(now.Add(s.cfg.FirstCheckAfter)),
+		ExpiresAt: now.Add(expiry), NextCheckAt: ptr(now.Add(expiry + s.cfg.FirstCheckAfter)), // see checkTxn
 	}
 	note := req.Note
 	if note == "" {
-		note = "Payment to " + req.Merchant.Name
+		note = "Payment to " + txn.PayeeName
 	}
 	txn.IntentURI, err = intent.Build(intent.Params{
 		PayeeVPA: txn.PayeeVPA, PayeeName: txn.PayeeName, MCC: txn.MCC, TxnID: txn.ID, TxnRef: txn.ID, Note: note,
@@ -154,6 +158,10 @@ func (s *Service) CreateCollect(ctx context.Context, t *domain.Tenant, req Colle
 	if err := req.Merchant.validate(); err != nil {
 		return nil, err
 	}
+	if req.Merchant.MCC == "0000" {
+		// NPCI withdrew person-to-person collect requests from 1 Oct 2025; only merchants may collect.
+		return nil, errUnprocessable("p2p_collect_not_allowed", "collect requests are only allowed for merchants (MCC 0000 is person-to-person)")
+	}
 	if !ValidVPA(req.PayerVPA) {
 		return nil, errValidation("payer_vpa is not a valid VPA")
 	}
@@ -161,8 +169,12 @@ func (s *Service) CreateCollect(ctx context.Context, t *domain.Tenant, req Colle
 	if err != nil {
 		return nil, errValidation("%v", err)
 	}
+	mer, err := s.merchantFor(ctx, t, req.Merchant, true)
+	if err != nil {
+		return nil, err
+	}
 	token := s.vault.Token(req.PayerVPA)
-	if err := s.checkRisk(ctx, t, amt, req.Merchant.MCC, token); err != nil {
+	if err := s.checkRisk(ctx, t, amt, req.Merchant.MCC, token, mer.Verified()); err != nil {
 		return nil, err
 	}
 	va, err := s.ValidateVPA(ctx, t, req.PayerVPA)
@@ -184,7 +196,7 @@ func (s *Service) CreateCollect(ctx context.Context, t *domain.Tenant, req Colle
 	txn := &domain.Txn{
 		ID: npci.NewTxnID(s.cfg.OrgID), TenantID: t.ID, MerchantRef: req.MerchantRef, Type: domain.TypeCollect,
 		Status: domain.StatusInitiated, AmountPaise: amt, Currency: "INR", PayeeVPA: payeeVPA(t, req.Merchant.ID, psps[0].Handle),
-		PayeeName: req.Merchant.Name, PayerVPAMasked: security.MaskVPA(req.PayerVPA), PayerVPAToken: token,
+		PayeeName: payeeName(mer), PayerVPAMasked: security.MaskVPA(req.PayerVPA), PayerVPAToken: token,
 		PayerVPAEnc: s.vault.Encrypt(req.PayerVPA), MerchantID: req.Merchant.ID, MCC: req.Merchant.MCC, Note: req.Note,
 		PSPID: psps[0].ID, ExpiresAt: now.Add(expiry),
 	}
@@ -356,6 +368,11 @@ func (s *Service) applyPayment(ctx context.Context, tx *store.Store, t *domain.T
 		return err
 	}
 	s.m.Transition("payment", string(to))
+	if t.MandateID != "" && to.IsFinal() {
+		if err := tx.SettleNotification(ctx, t.ID, to == domain.StatusSuccess, maxDebitTries); err != nil {
+			return err
+		}
+	}
 	evt := map[domain.TxnStatus]string{domain.StatusSuccess: "txn.success", domain.StatusFailed: "txn.failed", domain.StatusDeemed: "txn.deemed"}[to]
 	return s.enqueue(ctx, tx, t.TenantID, eventID(t.ID, string(to)), evt, t)
 }

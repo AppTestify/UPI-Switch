@@ -29,6 +29,11 @@ type Config struct {
 	DefaultRateLimit int
 	TrustProxy       bool
 	BankIPAllowlist  []string
+	ConsoleUsers     []ConsoleUser
+	SessionKey       []byte        // signs console session cookies; sign-in is disabled when empty
+	SessionTTL       time.Duration // console session lifetime (default 12h)
+	SessionIdle      time.Duration // signed-in console sessions end after this long without use (default 30m)
+	Location         *time.Location
 }
 
 // Server wires handlers to the orchestrator.
@@ -49,6 +54,12 @@ func New(cfg Config, svc *core.Service, st *store.Store, rc *recon.Engine, lim r
 	}
 	if cfg.DefaultRateLimit <= 0 {
 		cfg.DefaultRateLimit = 500
+	}
+	if cfg.SessionTTL <= 0 {
+		cfg.SessionTTL = 12 * time.Hour
+	}
+	if cfg.Location == nil {
+		cfg.Location = time.UTC
 	}
 	if lim == nil {
 		lim = ratelimit.NewLocal()
@@ -86,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Admin console API (RBAC).
 	s.adminRoutes(mux)
+	s.complianceRoutes(mux)
 
 	// Operations.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })

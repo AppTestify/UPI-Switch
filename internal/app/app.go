@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -69,6 +70,24 @@ func ParseAdminTokens(s string) ([]api.AdminToken, error) {
 	return out, nil
 }
 
+// ParseConsoleUsers parses "email:role:password,..." into console sign-ins.
+func ParseConsoleUsers(s string) ([]api.ConsoleUser, error) {
+	var out []api.ConsoleUser
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		f := strings.SplitN(part, ":", 3)
+		if len(f) != 3 || !strings.Contains(f[0], "@") || (f[1] != api.RoleAdmin && f[1] != api.RoleOps && f[1] != api.RoleViewer) || len(f[2]) < 8 {
+			return nil, fmt.Errorf("CONSOLE_USERS entry %q must be email:role:password with role admin|ops|viewer and a password of 8+ chars", f[0])
+		}
+		name, _, _ := strings.Cut(f[0], "@")
+		out = append(out, api.ConsoleUser{Email: strings.ToLower(f[0]), Name: name, Role: f[1], Password: f[2]})
+	}
+	return out, nil
+}
+
 // New connects to the database, migrates, and wires every component.
 func New(ctx context.Context, cfg config.Switch, opt Options) (*App, error) {
 	log := opt.Logger
@@ -114,7 +133,8 @@ func New(ctx context.Context, cfg config.Switch, opt Options) (*App, error) {
 	m := metrics.New()
 	rt := router.New(nil)
 	svc := core.New(core.Config{
-		OrgID: cfg.OrgID, IntentExpiry: cfg.IntentExpiry, FirstCheckAfter: cfg.FirstCheckAfter, MaxCheckAttempts: cfg.MaxCheckAttempts,
+		OrgID: cfg.OrgID, IntentExpiry: cfg.IntentExpiry, FirstCheckAfter: cfg.FirstCheckAfter, MaxCheckAttempts: cfg.MaxCheckAttempts, CheckWindow: cfg.CheckWindow,
+		PreDebitNotice: cfg.PreDebitNotice, AllowPeakMandates: cfg.AllowPeakMandates, Location: loc,
 	}, core.Deps{
 		Store: st, Signer: signer, Vault: vault, Router: rt, HTTP: bankHTTP, Logger: log, Metrics: m,
 		Risk: &risk.Engine{Stats: st, GlobalMCC: cfg.BlockedMCC, Location: loc},
@@ -143,7 +163,14 @@ func New(ctx context.Context, cfg config.Switch, opt Options) (*App, error) {
 		}
 		lim = ratelimit.Redis{Client: redis.NewClient(o)}
 	}
-	srv := api.New(api.Config{AdminTokens: tokens, TrustProxy: cfg.TrustProxy, BankIPAllowlist: cfg.BankIPAllowlist}, svc, st, rc, lim, log, m)
+	users, err := ParseConsoleUsers(cfg.ConsoleUsers)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	sessionKey := sha256.Sum256([]byte("console-session:" + cfg.DataKey))
+	srv := api.New(api.Config{AdminTokens: tokens, TrustProxy: cfg.TrustProxy, BankIPAllowlist: cfg.BankIPAllowlist,
+		ConsoleUsers: users, SessionKey: sessionKey[:], SessionTTL: cfg.SessionTTL, SessionIdle: cfg.SessionIdle, Location: loc}, svc, st, rc, lim, log, m)
 	return &App{
 		Cfg: cfg, Pool: pool, Store: st, Service: svc, Recon: rc, Server: srv, Metrics: m, Log: log,
 		Dispatcher: &webhook.Dispatcher{Store: st, Log: log, Metrics: m},
@@ -155,6 +182,7 @@ func (a *App) Start(ctx context.Context) {
 	go a.Service.RunPoller(ctx, a.Cfg.PollEvery)
 	go a.Dispatcher.Run(ctx, a.Cfg.WebhookEvery)
 	go a.Service.RunHeartbeat(ctx, a.Cfg.HeartbeatEvery)
+	go a.Service.RunIncidentMonitor(ctx, 30*time.Second)
 	go func() {
 		t := time.NewTicker(30 * time.Second)
 		defer t.Stop()
@@ -227,7 +255,8 @@ func bankClient(cfg config.Switch) (*http.Client, error) {
 		}
 		tr.TLSClientConfig = tc
 	}
-	return &http.Client{Timeout: 10 * time.Second, Transport: tr}, nil
+	// Per-API deadlines (npci.Timeout) apply through the request context; this is only a backstop.
+	return &http.Client{Timeout: 30 * time.Second, Transport: tr}, nil
 }
 
 // ServerTLS builds the listener TLS config; with TLS_CLIENT_CA set, client certificates are verified (mTLS).

@@ -78,7 +78,7 @@ type Txn struct {
 	IntentURI      string     `json:"intent_uri,omitempty"`
 	MandateID      string     `json:"mandate_id,omitempty"`
 	ExpiresAt      time.Time  `json:"expires_at"`
-	CheckAttempts  int        `json:"-"`
+	CheckAttempts  int        `json:"check_attempts"`
 	NextCheckAt    *time.Time `json:"-"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
@@ -198,6 +198,7 @@ type Limits struct {
 	VelocityWindowSecs int      `json:"velocity_window_secs"`
 	BlockedMCC         []string `json:"blocked_mcc"`
 	RateLimitPerSec    int      `json:"rate_limit_per_sec"`
+	RequireKYC         bool     `json:"require_kyc"` // refuse payments to merchants whose KYC is still pending
 }
 
 // Routing are per-tenant sponsor-bank routing rules.

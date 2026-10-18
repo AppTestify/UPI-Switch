@@ -4,120 +4,1505 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UPI Switch Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234338ca'/%3E%3Cpath d='M9 12h11l-3-3M23 20H12l3 3' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
-  :root { --bg:#f6f7f9; --panel:#fff; --text:#1d2330; --muted:#5b6475; --line:#dde1e8; --accent:#0b6e4f; --bad:#b42318; --warn:#9a6700; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#12151b; --panel:#1b2029; --text:#e6e9ef; --muted:#9aa3b2; --line:#2c3340; --accent:#3fbf8f; --bad:#f07167; --warn:#e0b04a; } }
+  :root {
+    color-scheme: light;
+    --bg: #f5f6fa; --panel: #ffffff; --panel-2: #f9fafc; --line: #e4e7ee; --line-2: #eef0f5;
+    --text: #0f172a; --text-2: #475569; --muted: #64748b; --faint: #94a3b8;
+    --brand: #4338ca; --brand-2: #6366f1; --brand-soft: #eef0ff; --brand-ink: #3730a3;
+    --side: #0b1224; --side-2: #131c33; --side-text: #cbd5e1; --side-muted: #7c8aa5;
+    --ok: #0f8a5f; --ok-soft: #e6f6ef; --bad: #c2362f; --bad-soft: #fdecea; --warn: #a15c00; --warn-soft: #fff4e0;
+    --info: #2d5bd2; --info-soft: #e9f0ff; --violet: #6d4ad6; --violet-soft: #f1ecff;
+    --s1: #2a78d6; --s1-soft: rgba(42,120,214,.14); --td: #e34948; --bd: #c98500;
+    --shadow: 0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.06);
+    --shadow-lg: 0 20px 50px rgba(15,23,42,.18);
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0b1020; --panel: #121a2e; --panel-2: #0f1628; --line: #222d47; --line-2: #1a2440;
+      --text: #e7ebf3; --text-2: #b6c0d4; --muted: #8b97ae; --faint: #66738c;
+      --brand: #818cf8; --brand-2: #a5b4fc; --brand-soft: #1d2350; --brand-ink: #c7d2fe;
+      --side: #070b17; --side-2: #10182c;
+      --ok: #3ccf91; --ok-soft: #0f2b22; --bad: #f2716a; --bad-soft: #351719; --warn: #f0b44c; --warn-soft: #33260e;
+      --info: #7aa2ff; --info-soft: #14224a; --violet: #a78bfa; --violet-soft: #241a45;
+      --s1: #3987e5; --s1-soft: rgba(57,135,229,.2); --td: #e66767; --bd: #e0a100;
+      --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 20px 50px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b1020; --panel: #121a2e; --panel-2: #0f1628; --line: #222d47; --line-2: #1a2440;
+    --text: #e7ebf3; --text-2: #b6c0d4; --muted: #8b97ae; --faint: #66738c;
+    --brand: #818cf8; --brand-2: #a5b4fc; --brand-soft: #1d2350; --brand-ink: #c7d2fe;
+    --side: #070b17; --side-2: #10182c;
+    --ok: #3ccf91; --ok-soft: #0f2b22; --bad: #f2716a; --bad-soft: #351719; --warn: #f0b44c; --warn-soft: #33260e;
+    --info: #7aa2ff; --info-soft: #14224a; --violet: #a78bfa; --violet-soft: #241a45;
+    --s1: #3987e5; --s1-soft: rgba(57,135,229,.2); --td: #e66767; --bd: #e0a100;
+    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 20px 50px rgba(0,0,0,.5);
+  }
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
-  header h1 { font-size:16px; margin:0 12px 0 0; }
-  nav button, button { background:none; border:1px solid var(--line); color:var(--text); padding:6px 10px; border-radius:6px; cursor:pointer; font:inherit; }
-  nav button.on { border-color:var(--accent); color:var(--accent); }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  input, select, textarea { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); }
-  main { padding:16px; max-width:1200px; margin:0 auto; }
-  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; overflow-x:auto; }
-  table { border-collapse:collapse; width:100%; font-size:13px; }
-  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-weight:600; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-  .muted { color:var(--muted); }
-  .SUCCESS, .ok, .ACTIVE, .DELIVERED, .MATCHED { color:var(--accent); }
-  .FAILED, .DEAD, .bad { color:var(--bad); }
-  .PENDING, .DEEMED, .INITIATED { color:var(--warn); }
-  pre { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:8px; border-radius:6px; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  .num, td.r, .kpi .v, .mono { font-variant-numeric: tabular-nums; }
+  .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  svg { display: block; }
+  :focus-visible { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+
+  /* ---- buttons & inputs ---- */
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; font-weight: 550; white-space: nowrap; box-shadow: var(--shadow); }
+  .btn:hover { background: var(--panel-2); text-decoration: none; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  :root[data-theme="dark"] .btn.primary { color: #0b1020; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #0b1020; } }
+  .btn.primary:hover { filter: brightness(1.07); background: var(--brand); }
+  .btn.danger { color: var(--bad); }
+  .btn.primary.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  .btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+  .btn.ghost:hover { background: var(--line-2); }
+  .btn.sm { height: 28px; padding: 0 10px; font-size: 13px; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn svg { width: 16px; height: 16px; }
+  .icon-btn { width: 34px; padding: 0; justify-content: center; }
+  .input, select.input { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-width: 0; }
+  .input:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px var(--brand-soft); }
+  textarea.input { height: auto; padding: 8px 10px; }
+  label.field { display: grid; gap: 6px; font-weight: 550; font-size: 13px; color: var(--text-2); }
+  label.field .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; background: var(--line-2); border-radius: 9px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 7px; cursor: pointer; font-weight: 550; color: var(--text-2); font-size: 13px; }
+  .seg button.on { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+
+  /* ---- login ---- */
+  #login { min-height: 100%; display: grid; grid-template-columns: 1.1fr 1fr; }
+  .login-hero { position: relative; overflow: hidden; background: radial-gradient(1200px 600px at -10% -20%, #3b2fb8 0%, transparent 55%), radial-gradient(900px 500px at 110% 120%, #0e7c86 0%, transparent 55%), #0a1023; color: #e6e9f5; padding: 48px 56px; display: flex; flex-direction: column; }
+  .login-hero .grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(180deg, rgba(0,0,0,.8), transparent 75%); }
+  .login-hero > * { position: relative; }
+  .login-hero h1 { font-size: 40px; line-height: 1.12; margin: auto 0 18px; max-width: 560px; letter-spacing: -.025em; }
+  .login-hero h1 span { background: linear-gradient(90deg, #a5b4fc, #5eead4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .login-hero p.lead { color: #aab3cf; max-width: 520px; font-size: 16px; margin: 0 0 32px; }
+  .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 600px; margin-bottom: 40px; }
+  .hero-stats div { border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); border-radius: 12px; padding: 14px 16px; }
+  .hero-stats b { display: block; font-size: 22px; color: #fff; letter-spacing: -.02em; }
+  .hero-stats span { color: #93a0c2; font-size: 12.5px; }
+  .hero-list { display: grid; gap: 10px; margin: 0 0 auto; padding: 0; list-style: none; color: #c9d0e6; max-width: 560px; }
+  .hero-list li { display: flex; gap: 10px; align-items: flex-start; }
+  .hero-list li::before { content: ""; flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; background: rgba(94,234,212,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' stroke='%235eead4' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat; }
+  .login-hero footer { color: #6f7b9c; font-size: 12.5px; margin-top: 32px; }
+  .login-panel { display: grid; place-items: center; padding: 40px 24px; background: var(--panel); }
+  .login-card { width: 100%; max-width: 380px; }
+  .login-card h2 { font-size: 24px; margin: 28px 0 6px; }
+  .login-card p.sub { color: var(--muted); margin: 0 0 28px; }
+  .login-card form { display: grid; gap: 16px; }
+  .login-card .input { height: 42px; }
+  .login-card .btn { height: 42px; justify-content: center; font-size: 15px; }
+  .login-err { color: var(--bad); background: var(--bad-soft); border-radius: 8px; padding: 9px 12px; font-size: 13px; }
+  .login-foot { margin-top: 28px; color: var(--muted); font-size: 12.5px; display: flex; gap: 8px; align-items: center; }
+  .login-foot svg { width: 15px; height: 15px; flex: none; }
+
+  /* ---- shell ---- */
+  #app { display: grid; grid-template-columns: 248px 1fr; min-height: 100%; background: linear-gradient(90deg, var(--side) 248px, transparent 248px); }
+  .side { background: var(--side); color: var(--side-text); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 20px 20px 16px; }
+  .logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #6366f1, #4338ca 55%, #0e9f9a); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(67,56,202,.45); flex: none; }
+  .logo svg { width: 20px; height: 20px; }
+  .brand b { display: block; color: #fff; font-size: 15px; letter-spacing: -.01em; }
+  .brand small { color: var(--side-muted); font-size: 11.5px; }
+  .env { margin: 0 16px 10px; padding: 8px 10px; border-radius: 9px; background: var(--side-2); border: 1px solid rgba(255,255,255,.06); font-size: 12px; display: flex; align-items: center; gap: 8px; color: #e2e8f0; }
+  .env i { width: 8px; height: 8px; border-radius: 50%; background: #f5b83d; box-shadow: 0 0 0 3px rgba(245,184,61,.18); flex: none; }
+  .env span { color: var(--side-muted); }
+  nav.menu { padding: 6px 10px 16px; display: grid; gap: 1px; }
+  nav.menu .grp { color: var(--side-muted); font-size: 11px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; padding: 16px 10px 6px; }
+  nav.menu a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--side-text); font-weight: 520; text-decoration: none; }
+  nav.menu a svg { width: 18px; height: 18px; opacity: .75; flex: none; }
+  nav.menu a:hover { background: var(--side-2); color: #fff; }
+  nav.menu a.on { background: linear-gradient(90deg, rgba(99,102,241,.28), rgba(99,102,241,.08)); color: #fff; box-shadow: inset 2px 0 0 #818cf8; }
+  nav.menu a.on svg { opacity: 1; }
+  nav.menu a .badge { margin-left: auto; background: rgba(242,113,106,.18); color: #ffb4ae; font-size: 11px; font-weight: 650; padding: 1px 7px; border-radius: 999px; }
+  .side .me { margin-top: auto; padding: 14px 16px; border-top: 1px solid rgba(255,255,255,.06); display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff; background: linear-gradient(135deg, #0e9f9a, #4338ca); flex: none; text-transform: uppercase; }
+  .side .me b { color: #fff; font-size: 13px; display: block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side .me small { color: var(--side-muted); font-size: 11.5px; text-transform: capitalize; }
+  .side .me button { margin-left: auto; background: none; border: 0; color: var(--side-muted); cursor: pointer; padding: 6px; border-radius: 6px; }
+  .side .me button:hover { color: #fff; background: var(--side-2); }
+  .side .me button svg { width: 18px; height: 18px; }
+
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 12px 28px; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .top h1 { font-size: 19px; }
+  .top .crumb { color: var(--muted); font-size: 12.5px; }
+  .top .spacer { flex: 1; }
+  .search { position: relative; width: min(340px, 34vw); }
+  .search svg { position: absolute; left: 10px; top: 9px; width: 16px; height: 16px; color: var(--faint); }
+  .search .input { width: 100%; padding-left: 32px; }
+  .search kbd { position: absolute; right: 8px; top: 7px; font: 11px ui-monospace, monospace; color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; background: var(--panel-2); }
+  .live { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); position: relative; }
+  .live i::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ok); opacity: 0; animation: ping 2s infinite; }
+  @keyframes ping { 0% { transform: scale(.5); opacity: .8; } 80%, 100% { transform: scale(1.5); opacity: 0; } }
+  .menu-btn { display: none; }
+  #view { padding: 24px 28px 48px; max-width: 1480px; width: 100%; }
+
+  /* ---- layout primitives ---- */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .toolbar .spacer { flex: 1; }
+  .grid { display: grid; gap: 16px; margin-bottom: 16px; }
+  .g-kpi { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .g-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g-3-1 { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); }
+  .g-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+  .card > header { display: flex; align-items: center; gap: 10px; padding: 16px 18px 0; }
+  .card > header h3 { font-size: 14.5px; }
+  .card > header .sub { color: var(--muted); font-size: 12.5px; }
+  .card > header .spacer { flex: 1; }
+  .card .body { padding: 14px 18px 18px; }
+  .card .body.flush { padding: 10px 0 4px; }
+  .muted { color: var(--muted); }
+  .faint { color: var(--faint); }
+  .small { font-size: 12.5px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .stack { display: grid; gap: 4px; }
+  .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---- KPI tiles ---- */
+  .kpi { padding: 16px 18px 14px; position: relative; overflow: hidden; }
+  .kpi .l { color: var(--muted); font-size: 12.5px; font-weight: 550; display: flex; align-items: center; gap: 6px; }
+  .kpi .v { font-size: 26px; font-weight: 700; letter-spacing: -.025em; margin: 6px 0 2px; line-height: 1.15; white-space: nowrap; }
+  .kpi .v small { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+  .kpi .d { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .kpi .spark { margin-top: 10px; height: 34px; }
+  .delta { font-weight: 650; display: inline-flex; align-items: center; gap: 2px; border-radius: 6px; padding: 0 6px; font-size: 12px; }
+  .delta.up { color: var(--ok); background: var(--ok-soft); }
+  .delta.down { color: var(--bad); background: var(--bad-soft); }
+  .delta.flat { color: var(--muted); background: var(--line-2); }
+  .target { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .target.ok { color: var(--ok); background: var(--ok-soft); }
+  .target.bad { color: var(--bad); background: var(--bad-soft); }
+
+  /* ---- pills & badges ---- */
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 9px 2px 8px; border-radius: 999px; white-space: nowrap; line-height: 1.6; }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.ok { color: var(--ok); background: var(--ok-soft); }
+  .pill.bad { color: var(--bad); background: var(--bad-soft); }
+  .pill.warn { color: var(--warn); background: var(--warn-soft); }
+  .pill.info { color: var(--info); background: var(--info-soft); }
+  .pill.violet { color: var(--violet); background: var(--violet-soft); }
+  .pill.neutral { color: var(--text-2); background: var(--line-2); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; letter-spacing: .02em; }
+  .tag.td { color: var(--bad); background: var(--bad-soft); }
+  .tag.bd { color: var(--warn); background: var(--warn-soft); }
+  .tag.plain { color: var(--text-2); background: var(--line-2); font-weight: 600; }
+  .code { font: 600 12px ui-monospace, monospace; background: var(--line-2); padding: 1px 6px; border-radius: 5px; }
+
+  /* ---- tables ---- */
+  .table-wrap { overflow-x: auto; }
+  table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--panel-2); position: sticky; top: 0; }
+  table.t td { padding: 10px 14px; border-bottom: 1px solid var(--line-2); white-space: nowrap; vertical-align: middle; }
+  table.t tr:last-child td { border-bottom: 0; }
+  table.t th.r, table.t td.r { text-align: right; }
+  table.t tbody tr.click { cursor: pointer; }
+  table.t tbody tr.click:hover td { background: var(--panel-2); }
+  table.t td .sub { color: var(--muted); font-size: 12px; }
+  table.t tr.fresh td { animation: fresh 2.2s ease-out; }
+  @keyframes fresh { from { background: var(--brand-soft); } to { background: transparent; } }
+  .card .table-wrap table.t th:first-child, .card .table-wrap table.t td:first-child { padding-left: 18px; }
+  .card .table-wrap table.t th:last-child, .card .table-wrap table.t td:last-child { padding-right: 18px; }
+  .pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+  .empty svg { width: 36px; height: 36px; margin: 0 auto 10px; color: var(--faint); }
+
+  /* ---- bars ---- */
+  .bar { height: 6px; border-radius: 3px; background: var(--line-2); overflow: hidden; min-width: 60px; }
+  .bar > i { display: block; height: 100%; border-radius: 3px; background: var(--s1); }
+  .bar.td > i { background: var(--td); }
+  .bar.bd > i { background: var(--bd); }
+  .bar.ok > i { background: var(--ok); }
+  .mix { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 4px 0 14px; }
+  .mix i { display: block; height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--text-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend i.line { height: 3px; border-radius: 2px; }
+  .legend i.dash { height: 0; border-top: 2px dashed var(--faint); border-radius: 0; width: 14px; }
+
+  /* ---- charts ---- */
+  .chart { position: relative; }
+  .chart svg text { fill: var(--muted); font-size: 11px; }
+  .chart .grid line { stroke: var(--line-2); }
+  .chart .axis line { stroke: var(--line); }
+  .chart .hover-line { stroke: var(--faint); stroke-dasharray: 3 3; }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg); border-radius: 10px; padding: 9px 11px; font-size: 12.5px; min-width: 150px; z-index: 5; transform: translate(-50%, -100%); white-space: nowrap; }
+  .tip b { display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .tip div { display: flex; justify-content: space-between; gap: 14px; }
+  .tip div span:first-child { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+  .tip div span:last-child { font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+  /* ---- banks ---- */
+  .bank { padding: 16px 18px; }
+  .bank h4 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .bank .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .bank .big { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin: 12px 0 2px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 550; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .bank .kv { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-2); }
+  .bank-ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; flex: none; }
+
+  /* ---- alerts strip ---- */
+  .alerts { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .alert { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; color: var(--text-2); box-shadow: var(--shadow); text-decoration: none !important; }
+  .alert b { color: var(--text); }
+  .alert .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .alert:hover { border-color: var(--brand-2); }
+
+  /* ---- drawer / modal / toast ---- */
+  .scrim { position: fixed; inset: 0; background: rgba(8,12,24,.45); z-index: 40; opacity: 0; transition: opacity .18s; }
+  .scrim.on { opacity: 1; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: var(--panel); z-index: 41; box-shadow: var(--shadow-lg); transform: translateX(100%); transition: transform .22s ease; display: flex; flex-direction: column; }
+  .drawer.on { transform: none; }
+  .drawer > header { padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; gap: 12px; }
+  .drawer > .content { padding: 18px 22px 28px; overflow-y: auto; display: grid; gap: 22px; align-content: start; }
+  .drawer h5 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+  .amount-hero { font-size: 30px; font-weight: 750; letter-spacing: -.025em; }
+  .parties { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+  .party { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .party small { color: var(--muted); font-size: 11.5px; display: block; }
+  .party b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .party .mono { color: var(--text-2); }
+  .copy { background: none; border: 0; padding: 2px; margin-left: 4px; cursor: pointer; color: var(--faint); vertical-align: middle; border-radius: 4px; }
+  .copy:hover { color: var(--brand); background: var(--brand-soft); }
+  .copy svg { width: 13px; height: 13px; }
+  .timeline { list-style: none; margin: 0; padding: 0; display: grid; }
+  .timeline li { display: grid; grid-template-columns: 18px 1fr auto; gap: 12px; position: relative; padding-bottom: 16px; }
+  .timeline li::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: var(--line); }
+  .timeline li:last-child::before { display: none; }
+  .timeline .node { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); background: var(--panel); margin-top: 1px; }
+  .timeline .node.ok { border-color: var(--ok); background: var(--ok-soft); }
+  .timeline .node.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .timeline .node.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .timeline .node.info { border-color: var(--info); background: var(--info-soft); }
+  .timeline .node.violet { border-color: var(--violet); background: var(--violet-soft); }
+  .timeline small { color: var(--muted); }
+  .modal { position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; padding: 16px; pointer-events: none; }
+  .modal .box { pointer-events: auto; width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--panel); border-radius: 14px; box-shadow: var(--shadow-lg); border: 1px solid var(--line); transform: translateY(8px) scale(.98); opacity: 0; transition: all .16s; }
+  .modal.on .box { transform: none; opacity: 1; }
+  .modal .box > header { padding: 20px 22px 4px; }
+  .modal .box > header p { color: var(--muted); margin: 6px 0 0; }
+  .modal .box > .content { padding: 16px 22px; display: grid; gap: 14px; }
+  .modal .box > footer { padding: 14px 22px 20px; display: flex; justify-content: flex-end; gap: 10px; }
+  .secret { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
+  .secret code { flex: 1; overflow-x: auto; white-space: nowrap; font: 12.5px ui-monospace, monospace; }
+  .note { display: flex; gap: 10px; padding: 10px 12px; border-radius: 9px; font-size: 13px; }
+  .note.warn { background: var(--warn-soft); color: var(--warn); }
+  .note.info { background: var(--info-soft); color: var(--info); }
+  .note.bad { background: var(--bad-soft); color: var(--bad); }
+  label.check { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; font-weight: 550; }
+  label.check .hint { flex-basis: 100%; padding-left: 24px; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .card.rule .kv dd { text-align: right; }
+  .card.rule .body { display: grid; gap: 10px; }
+  .incident { display: flex; gap: 12px; align-items: flex-start; padding: 12px 18px; border-top: 1px solid var(--line-2); }
+  .incident:first-child { border-top: 0; }
+  .incident .grow { flex: 1; min-width: 0; }
+  .note svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+  pre.json { margin: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 12px/1.5 ui-monospace, monospace; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .toasts { position: fixed; bottom: 20px; right: 20px; display: grid; gap: 8px; z-index: 60; }
+  .toast { background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 550; animation: tin .2s ease; max-width: 380px; }
+  .toast.bad { background: var(--bad); color: #fff; }
+  @keyframes tin { from { transform: translateY(8px); opacity: 0; } }
+  .skeleton { background: linear-gradient(90deg, var(--line-2), var(--panel-2), var(--line-2)); background-size: 200% 100%; animation: sk 1.2s infinite; border-radius: 8px; }
+  @keyframes sk { to { background-position: -200% 0; } }
+  .gw { padding: 18px; display: grid; gap: 14px; }
+  .gw-head { display: flex; gap: 12px; align-items: center; }
+  .gw-ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 750; color: #fff; font-size: 15px; flex: none; }
+  .gw-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .gw-stats div { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 10px; }
+  .gw-stats small { color: var(--muted); font-size: 11.5px; display: block; }
+  .gw-stats b { font-size: 15px; }
+  .gw footer { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line-2); padding-top: 12px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 12px; font-size: 13px; cursor: pointer; font-weight: 550; color: var(--text-2); }
+  .chip.on { background: var(--brand-soft); color: var(--brand-ink); border-color: transparent; }
+  .chip b { font-weight: 650; margin-left: 4px; }
+  .banner-ok { display: flex; gap: 14px; align-items: center; padding: 16px 18px; }
+  .banner-ok .ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .banner-ok .ic svg { width: 22px; height: 22px; }
+
+  @media (max-width: 1280px) { .g-kpi { grid-template-columns: repeat(3, minmax(0, 1fr)); } .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 1020px) {
+    .g-3-1, .g-2, .g-3 { grid-template-columns: minmax(0, 1fr); }
+    #app { grid-template-columns: 1fr; background: none; }
+    .side { position: fixed; z-index: 45; width: 260px; transform: translateX(-100%); transition: transform .2s; }
+    .side.open { transform: none; }
+    .menu-btn { display: inline-flex; }
+    #login { grid-template-columns: 1fr; }
+    .login-hero { padding: 32px 24px; }
+    .login-hero h1 { font-size: 30px; margin-top: 40px; }
+  }
+  @media (max-width: 640px) {
+    .g-kpi, .g-4 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    #view { padding: 16px; }
+    .top { padding: 10px 16px; }
+    .search { display: none; }
+    .kpi .v { font-size: 21px; }
+    .hero-stats { grid-template-columns: 1fr; }
+    .parties { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
-<header>
-  <h1>UPI Switch Console</h1>
-  <nav id="tabs"></nav>
-  <span style="flex:1"></span>
-  <input id="token" type="password" placeholder="Admin token" size="22" aria-label="Admin token">
-  <button id="save">Use token</button>
-</header>
-<main id="view"><section class="muted">Enter an admin token to begin.</section></main>
+
+<!-- ============ sign in ============ -->
+<div id="login" hidden>
+  <section class="login-hero">
+    <div class="grid-bg"></div>
+    <div class="row" style="gap:12px">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M5 9h12l-3.2-3.2M19 15H7l3.2 3.2" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><b style="color:#fff;font-size:16px">UPI Switch</b><div style="color:#8f9bbd;font-size:12px">by AppTestify</div></div>
+    </div>
+    <h1>One switch to every sponsor bank, <span>built for payment aggregators.</span></h1>
+    <p class="lead">Route UPI intent, QR, collect and AutoPay across multiple PSP banks with live success-rate routing, then reconcile and settle T+1 from the same console.</p>
+    <div class="hero-stats">
+      <div><b>3,000 TPS</b><span>design target, active-active (load test pending)</span></div>
+      <div><b>&lt; 150 ms</b><span>p99 switching target</span></div>
+      <div><b>3-way</b><span>ledger × bank MIS × NPCI recon</span></div>
+    </div>
+    <ul class="hero-list">
+      <li>Smart routing on success rate, latency and cost, with automatic failover when a bank degrades</li>
+      <li>Technical and business decline analytics in NPCI's own TD / BD terms</li>
+      <li>Signed NPCI XML with an HSM-ready signer, tokenised VPAs and a tamper-evident audit trail</li>
+    </ul>
+    <footer>© AppTestify · NPCI and bank legs run on the AppTestify simulator in this environment</footer>
+  </section>
+  <section class="login-panel">
+    <div class="login-card">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M5 9h12l-3.2-3.2M19 15H7l3.2 3.2" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <h2>Sign in to the console</h2>
+      <p class="sub">Operations, reconciliation and gateway management for your UPI switch.</p>
+      <form id="login-form" autocomplete="on">
+        <label class="field">Work email<input class="input" id="li-email" name="email" type="text" autocomplete="username" placeholder="you@company.com" required></label>
+        <label class="field">Password<input class="input" id="li-pass" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label>
+        <div class="login-err" id="li-err" hidden></div>
+        <button class="btn primary" id="li-btn" type="submit">Sign in</button>
+      </form>
+      <div class="login-foot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Role-based access. Every sign-in and action is written to the audit log.</div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ app shell ============ -->
+<div id="app" hidden>
+  <aside class="side" id="side">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M5 9h12l-3.2-3.2M19 15H7l3.2 3.2" stroke="white" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><b>UPI Switch</b><small>by AppTestify</small></div>
+    </div>
+    <div class="env"><i></i><div><b>Sandbox</b> <span>· simulated NPCI &amp; banks</span></div></div>
+    <nav class="menu" id="menu"></nav>
+    <div class="me">
+      <div class="avatar" id="me-av"></div>
+      <div style="min-width:0"><b id="me-name"></b><small id="me-role"></small></div>
+      <button id="logout" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg></button>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <button class="btn ghost icon-btn menu-btn" id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <div><h1 id="title">Overview</h1><div class="crumb" id="crumb"></div></div>
+      <span class="spacer"></span>
+      <form class="search" id="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="input" id="q" placeholder="Search txn ID, RRN or merchant ref" aria-label="Search transactions"><kbd>/</kbd></form>
+      <span class="live" id="live"><i></i><span id="live-t">Live</span></span>
+      <button class="btn ghost icon-btn" id="theme" title="Toggle theme" aria-label="Toggle theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    </header>
+    <div id="view"></div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" aria-hidden="true"></aside>
+<div class="modal" id="modal" hidden><div class="box" role="dialog" aria-modal="true"></div></div>
+<div class="toasts" id="toasts"></div>
+
 <script>
 (() => {
-  const tabs = ["Tenants", "PSP banks", "Transactions", "Webhooks", "Recon", "Settlements", "Audit"];
-  let token = "";
-  try { token = sessionStorage.getItem("atf_token") || ""; } catch (e) {}
-  const $ = (s) => document.querySelector(s);
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-  const today = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  "use strict";
+  // ------------------------------------------------------------ helpers
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const TZ = "Asia/Kolkata";
+  const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+  const inrFmt = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2, minimumFractionDigits: 2 });
+  const intFmt = new Intl.NumberFormat("en-IN");
+  const inr = (paise) => inrFmt.format((paise || 0) / 100);
+  const inrRupees = (r) => inrFmt.format(Number(r || 0));
+  function inrShort(paise) {
+    const r = (paise || 0) / 100, a = Math.abs(r);
+    if (a >= 1e7) return "₹" + (r / 1e7).toFixed(a >= 1e9 ? 0 : 2) + " Cr";
+    if (a >= 1e5) return "₹" + (r / 1e5).toFixed(2) + " L";
+    if (a >= 1e3) return "₹" + (r / 1e3).toFixed(1) + "K";
+    return "₹" + r.toFixed(0);
+  }
+  const num = (n) => intFmt.format(n || 0);
+  function numShort(n) {
+    if (n >= 1e7) return (n / 1e7).toFixed(2) + " Cr";
+    if (n >= 1e5) return (n / 1e5).toFixed(2) + " L";
+    if (n >= 1e4) return (n / 1e3).toFixed(1) + "K";
+    return num(n);
+  }
+  const pct = (x, d = 2) => (x * 100).toFixed(d) + "%";
+  const dtFmt = new Intl.DateTimeFormat("en-IN", { timeZone: TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  const dFmt = new Intl.DateTimeFormat("en-IN", { timeZone: TZ, day: "2-digit", month: "short", year: "numeric" });
+  const hFmt = new Intl.DateTimeFormat("en-IN", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+  const dayFmt = new Intl.DateTimeFormat("en-IN", { timeZone: TZ, day: "2-digit", month: "short" });
+  const dt = (s) => s ? dtFmt.format(new Date(s)) : "";
+  const dOnly = (s) => s ? dFmt.format(new Date(s)) : "";
+  function ago(s) {
+    const sec = Math.max(0, (Date.now() - new Date(s)) / 1000);
+    if (sec < 60) return Math.floor(sec) + "s ago";
+    if (sec < 3600) return Math.floor(sec / 60) + "m ago";
+    if (sec < 86400) return Math.floor(sec / 3600) + "h ago";
+    return dayFmt.format(new Date(s));
+  }
+  const istDate = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
+  const today = () => istDate(new Date());
+  const daysAgo = (n) => istDate(new Date(Date.now() - n * 864e5));
+  const ms = (v) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + " s" : Math.round(v) + " ms";
+  const dur = (msec) => { const m = Math.round(msec / 6e4), h = Math.floor(m / 60); return h ? `${h} h${m % 60 ? " " + (m % 60) + " min" : ""}` : `${m} min`; };
+  const short = (id, n = 10) => id && id.length > n + 4 ? id.slice(0, n) + "…" : (id || "");
+  const initials = (s) => String(s || "?").split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("");
+  const hues = ["#4f46e5", "#0e9f9a", "#d9480f", "#7c3aed", "#0369a1", "#be185d", "#4d7c0f", "#b45309"];
+  const hueFor = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return hues[h % hues.length]; };
+
+  const I = {
+    overview: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
+    txns: '<path d="M4 7h13l-3-3M20 17H7l3 3"/>',
+    gateways: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 14h4"/>',
+    banks: '<path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
+    settle: '<path d="M12 2v20M17 6.5C17 4.6 14.8 3.5 12 3.5S7 4.6 7 6.5 9.2 9.3 12 10s5 2 5 4-2.2 3.5-5 3.5-5-1.1-5-3"/>',
+    recon: '<path d="M9 11l3 3 8-8M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>',
+    disputes: '<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+    webhooks: '<path d="M18 16.1A4 4 0 1 1 14 20H8M6 15.9A4 4 0 1 1 10.4 10L13.5 4.5M12 8.5a4 4 0 1 1 3.9 4.6L13 18"/>',
+    audit: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/>',
+    play: '<path d="M7 4v16l13-8z"/>',
+    pause: '<path d="M7 4h3v16H7zM14 4h3v16h-3z"/>',
+    warn: '<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/>',
+    inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/>',
+    arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    merchants: '<path d="M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/>',
+    refunds: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+    mandates: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M9 16l2 2 4-4"/>',
+    compliance: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    rules: '<path d="M4 4h12l4 4v12H4z"/><path d="M8 10h8M8 14h8M8 18h5"/>',
+    key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.8-9.8M17 6l3 3M14 9l2 2"/>',
+  };
+  const ic = (name, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[name]}</svg>`;
+  const copyBtn = (v) => `<button class="copy" data-copy="${esc(v)}" title="Copy" aria-label="Copy">${ic("copy")}</button>`;
+
+  // ------------------------------------------------------------ domain vocab
+  const STATUS = {
+    SUCCESS: ["ok", "Success"], FAILED: ["bad", "Failed"], PENDING: ["warn", "Pending"], INITIATED: ["neutral", "Initiated"],
+    DEEMED: ["violet", "Deemed"], OFFLINE_QUEUED: ["warn", "Offline queued"], ACTIVE: ["ok", "Active"], SUSPENDED: ["bad", "Suspended"],
+    DELIVERED: ["ok", "Delivered"], DEAD: ["bad", "Dead-lettered"], PAID: ["ok", "Paid"], PENDING_PAYOUT: ["warn", "Awaiting payout"],
+    RAISED: ["warn", "Raised"], UNDER_REVIEW: ["info", "Under review"], RESOLVED_ACCEPTED: ["ok", "Resolved · accepted"], RESOLVED_REJECTED: ["neutral", "Resolved · rejected"],
+    MATCHED: ["ok", "Matched"], DEEMED_RESOLVED: ["violet", "Deemed resolved"], PENDING_RESOLVED: ["info", "Pending resolved"], AMOUNT_MISMATCH: ["bad", "Amount mismatch"],
+    MISSING_IN_BANK: ["warn", "Missing in bank MIS"], MISSING_IN_NPCI: ["warn", "Missing in NPCI file"], STATUS_MISMATCH: ["bad", "Status mismatch"],
+    UNKNOWN_IN_LEDGER: ["bad", "Unknown in ledger"], UNRESOLVED_PENDING: ["warn", "Unresolved"], COMPLETED: ["ok", "Completed"],
+    REVOKED: ["neutral", "Revoked"], NOTIFIED: ["info", "Notified"], EXECUTED: ["ok", "Debited"], SUPERSEDED: ["neutral", "Superseded"],
+    RESOLVED: ["ok", "Resolved"], VERIFIED: ["ok", "Verified"], REJECTED: ["bad", "Rejected"], EXPIRED: ["neutral", "Expired"], PAUSED: ["warn", "Paused"],
+  };
+  const pill = (s) => { const [k, l] = STATUS[s] || ["neutral", String(s || "—").replace(/_/g, " ").toLowerCase()]; return `<span class="pill ${k}">${esc(l)}</span>`; };
+  // NPCI response codes: meaning, whether it is a technical (TD) or business (BD) decline, and who caused it.
+  const CODES = {
+    "00": ["Approved", "", ""], RB: ["Deemed approved, awaiting reconciliation", "TD", "Beneficiary"],
+    Z9: ["Insufficient funds", "BD", "Customer"], ZM: ["Incorrect UPI PIN", "BD", "Customer"], ZA: ["Declined by customer", "BD", "Customer"],
+    Z8: ["Per-transaction limit exceeded", "BD", "Remitter bank"], Z7: ["Frequency limit exceeded", "BD", "Remitter bank"], ZH: ["Invalid VPA", "BD", "Customer"],
+    U69: ["Collect request expired", "BD", "Customer"], K1: ["Suspected fraud, declined by remitter", "BD", "Remitter bank"], YC: ["Do not honour", "BD", "Remitter bank"],
+    U16: ["Risk threshold exceeded", "BD", "NPCI"], RD: ["Declined by switch risk rules", "BD", "Switch"],
+    U30: ["Debit failed at remitter bank", "TD", "Remitter bank"], U28: ["PSP or bank not available", "TD", "Remitter PSP"],
+    U90: ["Remitter bank high response time", "TD", "Remitter bank"], XY: ["Remitter CBS offline", "TD", "Remitter bank"],
+    BT: ["Beneficiary bank unavailable", "TD", "Beneficiary bank"], U09: ["Remitter bank timeout", "TD", "Remitter bank"],
+    U91: ["Beneficiary bank timeout", "TD", "Beneficiary bank"], "96": ["Reversal failure", "TD", "Bank"],
+  };
+  const codeInfo = (c, reason) => CODES[c] || [reason || "Unmapped response code", "", ""];
+  const kindTag = (k) => k === "TD" ? '<span class="tag td" title="Technical decline: counts against the bank or network">TD</span>' : k === "BD" ? '<span class="tag bd" title="Business decline: caused by the customer or the remitter\'s rules">BD</span>' : "";
+  const TYPES = { INTENT: "Intent", QR: "Dynamic QR", COLLECT: "Collect", MANDATE_DEBIT: "AutoPay debit" };
+  const ROLE_RANK = { viewer: 1, ops: 2, admin: 3 };
+
+  // ------------------------------------------------------------ state & API
+  const S = { gen: 0, me: null, tenants: [], tenantName: {}, psps: [], pspName: {}, range: store.get("atf_range") || "24h", tenant: "", timers: [], ov: null };
+  const can = (role) => S.me && ROLE_RANK[S.me.role] >= ROLE_RANK[role];
+  class ApiError extends Error { constructor(m, status) { super(m); this.status = status; } }
   async function api(method, path, body) {
-    const r = await fetch(path, { method, headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const r = await fetch(path, { method, credentials: "same-origin", headers: { "Content-Type": "application/json", "X-ATF-Console": "1" }, body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 401 && path !== "/admin/login") { showLogin(); throw new ApiError("Your session has ended. Sign in again.", 401); }
+    if (r.status === 204) return null;
     const ct = r.headers.get("Content-Type") || "";
     const data = ct.includes("json") ? await r.json() : await r.text();
-    if (!r.ok) throw new Error((data.error && data.error.message) || r.status);
+    if (!r.ok) throw new ApiError((data && data.error && data.error.message) || ("Request failed (" + r.status + ")"), r.status);
     return data;
   }
-  function table(rows, cols) {
-    if (!rows || !rows.length) return '<p class="muted">Nothing here.</p>';
-    return "<table><tr>" + cols.map(c => `<th>${esc(c[0])}</th>`).join("") + "</tr>" +
-      rows.map(r => "<tr>" + cols.map(c => { const v = typeof c[1] === "function" ? c[1](r) : r[c[1]]; return `<td class="${esc(v)}">${c[2] ? v : esc(v)}</td>`; }).join("") + "</tr>").join("") + "</table>";
+  function toast(msg, bad) { const t = document.createElement("div"); t.className = "toast" + (bad ? " bad" : ""); t.textContent = msg; $("#toasts").append(t); setTimeout(() => t.remove(), 4200); }
+  async function loadRefs() {
+    const [t, p] = await Promise.all([api("GET", "/admin/tenants"), api("GET", "/admin/psps")]);
+    S.tenants = t.tenants || []; S.tenantName = Object.fromEntries(S.tenants.map((x) => [x.tenant_id, x.name]));
+    S.psps = p.psps || []; S.pspName = Object.fromEntries(S.psps.map((x) => [x.psp_id, x.name]));
+    S.health = p.health || [];
+    if (!S.rules) S.rules = await api("GET", "/admin/compliance/rules");
   }
-  const view = $("#view");
-  const show = async (name) => {
-    document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.textContent === name));
-    try { view.innerHTML = await pages[name](); bind[name] && bind[name](); }
-    catch (e) { view.innerHTML = `<section class="bad">${esc(e.message)}</section>`; }
+  const tName = (id) => S.tenantName[id] || id;
+  const pName = (id) => S.pspName[id] || id;
+  const every = (fn, msec) => { S.timers.push(setInterval(() => { if (!document.hidden) fn(); }, msec)); };
+  const clearTimers = () => { S.timers.forEach(clearInterval); S.timers = []; };
+
+  // ------------------------------------------------------------ charts (hand-rolled SVG, no dependencies)
+  function niceMax(v) { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); const m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; }
+  /**
+   * Time-series chart with a shared y-axis, optional dashed reference lines and a crosshair tooltip.
+   * series: [{name, color, values, area?}], x: Date[], fmt(v) for axis & tooltip, refs: [{v, label}]
+   */
+  function lineChart(el, { x, series, fmt, refs = [], height = 240, yMin, yMax, xFmt, tipTitle }) {
+    const W = Math.max(280, el.clientWidth || 600), H = height, m = { t: 12, r: 14, b: 26, l: 54 };
+    const all = series.flatMap((s) => s.values).concat(refs.map((r) => r.v));
+    let lo = yMin ?? 0, hi = yMax ?? niceMax(Math.max(...all, 0) * 1.08);
+    if (yMin === "auto") { const mn = Math.min(...series.flatMap((s) => s.values.filter((v) => v != null))); lo = Math.max(0, Math.floor(mn * 100 - 1) / 100); hi = yMax ?? 1; }
+    if (hi <= lo) hi = lo + 1;
+    const n = x.length, px = (i) => m.l + (n <= 1 ? 0 : i * (W - m.l - m.r) / (n - 1)), py = (v) => m.t + (1 - (v - lo) / (hi - lo)) * (H - m.t - m.b);
+    const ticks = 4, grid = [];
+    for (let k = 0; k <= ticks; k++) { const v = lo + (hi - lo) * k / ticks; grid.push(`<line x1="${m.l}" x2="${W - m.r}" y1="${py(v)}" y2="${py(v)}"/><text x="${m.l - 8}" y="${py(v) + 4}" text-anchor="end">${esc(fmt(v, true))}</text>`); }
+    const xt = [], step = Math.max(1, Math.ceil(n / Math.max(2, Math.floor((W - m.l) / 90))));
+    for (let i = 0; i < n; i += step) xt.push(`<text x="${px(i)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : "middle"}">${esc(xFmt(x[i]))}</text>`);
+    const paths = series.map((s) => {
+      const pts = s.values.map((v, i) => v == null ? null : [px(i), py(v)]);
+      let d = "", started = false;
+      pts.forEach((p) => { if (!p) { started = false; return; } d += (started ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1); started = true; });
+      const area = s.area && pts.length ? `<path d="${d}L${px(n - 1)},${py(lo)}L${px(0)},${py(lo)}Z" fill="url(#g-${s.id})" stroke="none"/>` : "";
+      const grad = s.area ? `<defs><linearGradient id="g-${s.id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:${s.color};stop-opacity:.22"/><stop offset="1" style="stop-color:${s.color};stop-opacity:0"/></linearGradient></defs>` : "";
+      return grad + area + `<path d="${d}" fill="none" style="stroke:${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    }).join("");
+    const refEls = refs.map((r) => `<line x1="${m.l}" x2="${W - m.r}" y1="${py(r.v)}" y2="${py(r.v)}" style="stroke:var(--faint)" stroke-dasharray="4 4"/><text x="${W - m.r}" y="${py(r.v) - 5}" text-anchor="end">${esc(r.label)}</text>`).join("");
+    el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="${esc(series.map((s) => s.name).join(", "))} chart"><g class="grid">${grid.join("")}</g>${refEls}${paths}<g>${xt.join("")}</g>
+      <line class="hover-line" y1="${m.t}" y2="${H - m.b}" x1="-10" x2="-10"/>${series.map((s) => `<circle r="4" style="fill:${s.color};stroke:var(--panel)" stroke-width="2" cx="-10" cy="-10" data-dot/>`).join("")}
+      <rect x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent" data-hit/></svg><div class="tip" hidden></div>`;
+    const hit = $("[data-hit]", el), tip = $(".tip", el), hl = $(".hover-line", el), dots = $$("[data-dot]", el);
+    const show = (evt) => {
+      const r = el.getBoundingClientRect(), xpos = evt.clientX - r.left;
+      const i = Math.max(0, Math.min(n - 1, Math.round((xpos - m.l) / ((W - m.l - m.r) / Math.max(1, n - 1)))));
+      hl.setAttribute("x1", px(i)); hl.setAttribute("x2", px(i));
+      series.forEach((s, k) => { const v = s.values[i]; dots[k].setAttribute("cx", v == null ? -10 : px(i)); dots[k].setAttribute("cy", v == null ? -10 : py(v)); });
+      tip.hidden = false;
+      tip.innerHTML = `<b>${esc(tipTitle(x[i]))}</b>` + series.map((s) => `<div><span><i style="background:${s.color}"></i>${esc(s.name)}</span><span>${s.values[i] == null ? "—" : esc(fmt(s.values[i]))}</span></div>`).join("") + (series.extra ? series.extra(i) : "");
+      const top = Math.min(...series.map((s) => s.values[i] == null ? H : py(s.values[i])));
+      tip.style.left = Math.min(Math.max(px(i), 90), W - 90) + "px"; tip.style.top = Math.max(top - 10, 60) + "px";
+    };
+    hit.addEventListener("mousemove", show);
+    hit.addEventListener("mouseleave", () => { tip.hidden = true; hl.setAttribute("x1", -10); hl.setAttribute("x2", -10); dots.forEach((d) => d.setAttribute("cx", -10)); });
+  }
+  function spark(values, color = "var(--s1)") {
+    const v = values.filter((x) => x != null); if (v.length < 2) return "";
+    const W = 200, H = 34, lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+    const pts = values.map((x, i) => x == null ? null : [i * W / (values.length - 1), H - 3 - (x - lo) / span * (H - 6)]).filter(Boolean);
+    const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join("");
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="${H}" aria-hidden="true"><path d="${d}L${W},${H}L0,${H}Z" style="fill:${color}" opacity=".09"/><path d="${d}" fill="none" style="stroke:${color}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+  function delta(cur, prev, { invert = false, points = false } = {}) {
+    if (prev == null || (!points && !prev)) return '<span class="delta flat">new</span>';
+    const d = points ? (cur - prev) * 100 : (cur - prev) / prev * 100;
+    if (Math.abs(d) < (points ? 0.005 : 0.05)) return '<span class="delta flat">0.0' + (points ? " pp" : "%") + "</span>";
+    const good = invert ? d < 0 : d > 0;
+    return `<span class="delta ${good ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(points ? 2 : 1)}${points ? " pp" : "%"}</span>`;
+  }
+
+  // ------------------------------------------------------------ shell, routing, auth
+  const NAV = [
+    ["Monitor", [["overview", "Overview", "overview"], ["transactions", "Transactions", "txns"], ["refunds", "Refunds", "refunds"], ["disputes", "Disputes", "disputes"]]],
+    ["Network", [["banks", "Sponsor banks", "banks"], ["gateways", "Payment gateways", "gateways"], ["merchants", "Merchants", "merchants"]]],
+    ["Finance", [["settlements", "Settlements", "settle"], ["recon", "Reconciliation", "recon"], ["mandates", "AutoPay mandates", "mandates"]]],
+    ["Compliance", [["tat", "RBI turnaround", "compliance"], ["rules", "NPCI & RBI rules", "rules"]]],
+    ["Developers", [["webhooks", "Webhooks", "webhooks"], ["audit", "Audit log", "audit"]]],
+  ];
+  const TITLES = { overview: ["Overview", "Switch health, volume and declines across every gateway"], transactions: ["Transactions", "Every payment routed through the switch"],
+    disputes: ["Disputes", "UDIR complaints, TCC and chargebacks"], banks: ["Sponsor banks", "PSP bank links, live routing health and success rates"],
+    gateways: ["Payment gateways", "Tenants onboarded to the switch"], settlements: ["Settlements", "T+1 merchant settlement and payouts"],
+    recon: ["Reconciliation", "Three-way match: switch ledger × bank MIS × NPCI raw file"], webhooks: ["Webhooks", "Signed event delivery to payment gateways"],
+    audit: ["Audit log", "Tamper-evident, hash-chained record of every operator action"],
+    merchants: ["Merchants", "Sub-merchant KYC, category limits and payee names"], refunds: ["Refunds", "Online and offline refunds across every gateway"],
+    mandates: ["AutoPay mandates", "UPI recurring mandates, pre-debit notifications and debits"], tat: ["RBI turnaround", "Failed-transaction reversals against the T+5 deadline"],
+    rules: ["NPCI & RBI rules", "The network and regulatory rules this switch enforces"] };
+  function renderMenu(page) {
+    $("#menu").innerHTML = NAV.map(([g, items]) => `<div class="grp">${g}</div>` + items.map(([id, label, icon]) =>
+      `<a href="#/${id}" class="${id === page ? "on" : ""}">${ic(icon)}<span>${label}</span>${id === "webhooks" && S.dead ? `<span class="badge">${S.dead}</span>` : ""}${id === "disputes" && S.openDisputes ? `<span class="badge">${S.openDisputes}</span>` : ""}${id === "tat" && S.tatLate ? `<span class="badge">${S.tatLate}</span>` : ""}${id === "merchants" && S.kycPending ? `<span class="badge">${S.kycPending}</span>` : ""}</a>`).join("")).join("");
+  }
+  function parseHash() { const h = location.hash.replace(/^#\/?/, ""); const [p, qs] = h.split("?"); return { page: PAGES[p] ? p : "overview", params: new URLSearchParams(qs || "") }; }
+  function go(page, params) { const qs = params ? new URLSearchParams(params).toString() : ""; location.hash = "#/" + page + (qs ? "?" + qs : ""); }
+  async function route() {
+    if (!S.me) return;
+    clearTimers(); closeDrawer();
+    const { page, params } = parseHash();
+    renderMenu(page);
+    const [title, crumb] = TITLES[page];
+    $("#title").textContent = title; $("#crumb").textContent = crumb;
+    document.title = title + " · UPI Switch Console";
+    $("#side").classList.remove("open");
+    setLive("Live");
+    const view = $("#view");
+    view.innerHTML = '<div class="grid g-kpi">' + '<div class="card skeleton" style="height:120px"></div>'.repeat(6) + '</div><div class="card skeleton" style="height:320px"></div>';
+    const gen = ++S.gen;
+    try { await PAGES[page](view, params); }
+    catch (e) { if (gen === S.gen && e.status !== 401) view.innerHTML = `<div class="card"><div class="empty">${ic("warn")}<b>Couldn't load this page</b><div class="small">${esc(e.message)}</div></div></div>`; }
+  }
+  function showLogin() {
+    S.me = null; clearTimers();
+    $("#app").hidden = true; $("#login").hidden = false;
+    document.title = "Sign in · UPI Switch Console";
+    setTimeout(() => $("#li-email").focus(), 0);
+  }
+  async function enter(me) {
+    S.me = me;
+    $("#login").hidden = true; $("#app").hidden = false;
+    $("#me-name").textContent = me.email || me.name; $("#me-role").textContent = me.role + " access"; $("#me-av").textContent = initials(me.name);
+    await loadRefs();
+    route();
+  }
+  $("#login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("#li-btn"), err = $("#li-err");
+    btn.disabled = true; btn.textContent = "Signing in…"; err.hidden = true;
+    try { const me = await api("POST", "/admin/login", { email: $("#li-email").value, password: $("#li-pass").value }); $("#li-pass").value = ""; await enter(me); }
+    catch (x) { err.textContent = x.message; err.hidden = false; }
+    finally { btn.disabled = false; btn.textContent = "Sign in"; }
+  });
+  $("#logout").onclick = async () => { try { await api("POST", "/admin/logout"); } catch (e) {} location.hash = ""; showLogin(); };
+  $("#menu-btn").onclick = () => $("#side").classList.toggle("open");
+  $("#search").addEventListener("submit", (e) => { e.preventDefault(); const q = $("#q").value.trim(); if (q) { go("transactions", { q }); $("#q").blur(); } });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) && S.me) { e.preventDefault(); $("#q").focus(); }
+    if (e.key === "Escape" && !$("#modal [data-done]")) { closeDrawer(); closeModal(); } // one-time secrets close only by their button
+  });
+  function applyTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+  applyTheme(store.get("atf_theme"));
+  $("#theme").onclick = () => {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const t = dark ? "light" : "dark"; applyTheme(t); store.set("atf_theme", t);
   };
-  const pages = {
-    "Tenants": async () => {
-      const d = await api("GET", "/admin/tenants");
-      return `<section><h3>Onboard a payment gateway</h3><div class="row">
-        <input id="tn" placeholder="Name"><input id="tp" placeholder="VPA prefix (e.g. razorpg)"><input id="tw" placeholder="Webhook URL" size="34">
-        <button class="primary" id="onboard">Onboard</button></div><pre id="out" class="muted">Secrets are shown once after onboarding.</pre></section>
-        <section><h3>Tenants</h3>${table(d.tenants, [["ID","tenant_id"],["Name","name"],["Status","status"],["VPA prefix","vpa_prefix"],["API key","api_key_id"],["Webhook","webhook_url"],["Fee bps","fee_bps"]])}</section>`;
-    },
-    "PSP banks": async () => {
-      const d = await api("GET", "/admin/psps");
-      return `<section><h3>Router health</h3>${table(d.health, [["PSP","psp_id"],["Enabled","enabled"],["Success rate","success_rate"],["Latency ms","latency_ms"],["Cost bps","cost_bps"],["Score","score"],["Circuit open","circuit_open"],["Samples","samples"],["Last error","last_error"]])}</section>
-        <section><h3>Configured banks</h3>${table(d.psps, [["ID","psp_id"],["Name","name"],["Handle","handle"],["Endpoint","endpoint"],["Priority","priority"]])}</section>`;
-    },
-    "Transactions": async () => {
-      const st = window._st || "";
-      const d = await api("GET", "/admin/txns?limit=200" + (st ? "&status=" + encodeURIComponent(st) : ""));
-      return `<section><div class="row"><select id="st">${["","INITIATED","PENDING","SUCCESS","FAILED","DEEMED"].map(s => `<option ${s===st?"selected":""}>${s}</option>`).join("")}</select><button id="filter">Filter</button></div>
-        ${table(d.transactions, [["Txn","txn_id"],["Tenant","tenant_id"],["Type","type"],["Status","status"],["Amount","amount"],["Payee","payee_vpa"],["Payer","payer_vpa"],["PSP","psp"],["RRN","rrn"],["Code","resp_code"],["Created","created_at"]])}</section>`;
-    },
-    "Webhooks": async () => {
-      const d = await api("GET", "/admin/webhooks?status=DEAD");
-      return `<section><h3>Dead-letter queue</h3>${table(d.webhooks, [["ID","id"],["Tenant","tenant_id"],["Event","event_type"],["Attempts","attempts"],["Last error","last_error"],["", r => `<button data-replay="${esc(r.id)}">Replay</button>`, true]])}</section>`;
-    },
-    "Recon": async () => `<section><div class="row"><input id="rd" type="date" value="${today()}"><button class="primary" id="runrecon">Run recon (pull bank files)</button><button id="viewrecon">View latest</button></div><div id="rout"></div></section>`,
-    "Settlements": async () => `<section><div class="row"><input id="sd" type="date" value="${today()}"><button class="primary" id="runsettle">Compute T+1 settlement for this business date</button></div><div id="sout"></div></section>`,
-    "Audit": async () => {
-      const [v, d] = await Promise.all([api("GET", "/admin/audit/verify"), api("GET", "/admin/audit?limit=100")]);
-      return `<section><p class="${v.intact ? "ok" : "bad"}">Hash chain ${v.intact ? "intact" : "BROKEN at entry " + esc(v.first_broken_id)} · ${esc(v.entries)} entries</p>
-        ${table(d.entries, [["ID","id"],["At","at"],["Actor","actor"],["Action","action"],["Entity","entity"],["Entity id","entity_id"]])}</section>`;
-    },
+  document.addEventListener("click", (e) => {
+    const c = e.target.closest("[data-copy]");
+    if (c) { e.stopPropagation(); navigator.clipboard && navigator.clipboard.writeText(c.dataset.copy).then(() => toast("Copied to clipboard")); }
+  });
+  window.addEventListener("hashchange", route);
+  let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => S.redraw && S.redraw(), 150); });
+  function setLive(text) { $("#live-t").textContent = text; }
+
+  // ------------------------------------------------------------ drawer & modal
+  function openDrawer(html) { const d = $("#drawer"); d.innerHTML = html; $("#scrim").hidden = false; requestAnimationFrame(() => { $("#scrim").classList.add("on"); d.classList.add("on"); }); d.setAttribute("aria-hidden", "false"); }
+  function closeDrawer() { const d = $("#drawer"); if (!d.classList.contains("on")) return; d.classList.remove("on"); $("#scrim").classList.remove("on"); d.setAttribute("aria-hidden", "true"); setTimeout(() => { $("#scrim").hidden = true; }, 200); }
+  $("#scrim").onclick = closeDrawer;
+  function modal(html) { const m = $("#modal"); $(".box", m).innerHTML = html; m.hidden = false; requestAnimationFrame(() => m.classList.add("on")); $(".box", m).querySelector("input,button.primary")?.focus(); return $(".box", m); }
+  function closeModal() { const m = $("#modal"); m.classList.remove("on"); setTimeout(() => { m.hidden = true; }, 160); }
+  function confirmModal({ title, body, action, danger }) {
+    return new Promise((resolve) => {
+      const b = modal(`<header><h3>${esc(title)}</h3><p>${body}</p></header><footer><button class="btn" data-no>Cancel</button><button class="btn primary${danger ? " danger" : ""}" data-yes>${esc(action)}</button></footer>`);
+      $("[data-no]", b).onclick = () => { closeModal(); resolve(false); };
+      $("[data-yes]", b).onclick = () => { closeModal(); resolve(true); };
+    });
+  }
+  const empty = (msg, sub = "") => `<div class="empty">${ic("inbox")}<b>${esc(msg)}</b>${sub ? `<div class="small">${sub}</div>` : ""}</div>`;
+  function tenantSelect(id, value, all = "All gateways") { return `<select class="input" id="${id}"><option value="">${all}</option>${S.tenants.map((t) => `<option value="${esc(t.tenant_id)}" ${t.tenant_id === value ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>`; }
+
+  // ------------------------------------------------------------ pages
+  const PAGES = {};
+
+  // ---------- Overview
+  PAGES.overview = async (view) => {
+    const ranges = [["today", "Today"], ["24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"]];
+    view.innerHTML = `<div class="toolbar"><div class="seg" id="rng">${ranges.map(([k, l]) => `<button data-r="${k}" class="${k === S.range ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${tenantSelect("ov-t", S.tenant)}<span class="spacer"></span><span class="small muted" id="ov-upd"></span>
+      <button class="btn sm" id="ov-ref">${ic("refresh")}Refresh</button></div><div id="ov"></div>`;
+    $$("#rng button").forEach((b) => b.onclick = () => { S.range = b.dataset.r; store.set("atf_range", S.range); $$("#rng button").forEach((x) => x.classList.toggle("on", x === b)); load(); });
+    $("#ov-t").onchange = (e) => { S.tenant = e.target.value; load(); };
+    $("#ov-ref").onclick = () => load();
+    let loadedAt = 0, feed = [];
+    async function load(quiet) {
+      const [d, tx] = await Promise.all([api("GET", `/admin/stats/overview?range=${S.range}&tenant=${encodeURIComponent(S.tenant)}`),
+        api("GET", `/admin/txns?limit=8&tenant=${encodeURIComponent(S.tenant)}`)]);
+      S.ov = d; S.dead = d.open.dead_webhooks; S.openDisputes = d.open.disputes; S.tatLate = d.open.tat_breached; S.kycPending = d.open.kyc_pending;
+      if (!$("#ov")) return; // the user moved on while this was loading
+      renderMenu("overview");
+      const fresh = new Set(feed.map((t) => t.txn_id)); feed = tx.transactions;
+      render(d, quiet ? fresh : null); loadedAt = Date.now();
+    }
+    function render(d, seen) {
+      const t = d.totals, p = d.previous, x = d.series.map((b) => new Date(b.at)), hourly = d.bucket === "hour";
+      const xFmt = (v) => hourly ? (d.range === "7d" ? dayFmt.format(v) : hFmt.format(v)) : dayFmt.format(v);
+      const tipTitle = (v) => hourly ? dayFmt.format(v) + ", " + hFmt.format(v) + " IST" : dFmt.format(v);
+      const srSeries = d.series.map((b) => b.count ? b.success / b.count : null);
+      const tdSeries = d.series.map((b) => b.count ? b.technical_declines / b.count : null);
+      const bdSeries = d.series.map((b) => b.count ? (b.failed - b.technical_declines) / b.count : null);
+      const techSR = t.count - d.business_declines ? t.success / (t.count - d.business_declines) : 0;
+      const ex = d.open, alerts = [];
+      if (ex.deemed) alerts.push(`<a class="alert" href="#/transactions?status=DEEMED"><span class="dot" style="background:var(--violet)"></span><b>${num(ex.deemed)}</b> deemed awaiting T+1 recon</a>`);
+      if (ex.stuck_pending) alerts.push(`<a class="alert" href="#/transactions?status=PENDING"><span class="dot" style="background:var(--warn)"></span><b>${num(ex.stuck_pending)}</b> pending over 5 min</a>`);
+      if (ex.disputes) alerts.push(`<a class="alert" href="#/disputes"><span class="dot" style="background:var(--info)"></span><b>${num(ex.disputes)}</b> open disputes</a>`);
+      if (ex.bank_incidents) alerts.unshift(`<a class="alert" href="#/banks"><span class="dot" style="background:var(--bad)"></span><b>${num(ex.bank_incidents)}</b> sponsor bank downtime ${ex.bank_incidents > 1 ? "incidents" : "incident"} open</a>`);
+      if (ex.tat_breached) alerts.push(`<a class="alert" href="#/tat?show=late"><span class="dot" style="background:var(--bad)"></span><b>${num(ex.tat_breached)}</b> past RBI T+5 reversal deadline</a>`);
+      if (ex.kyc_pending) alerts.push(`<a class="alert" href="#/merchants?kyc=PENDING"><span class="dot" style="background:var(--warn)"></span><b>${num(ex.kyc_pending)}</b> merchants awaiting KYC</a>`);
+      if (ex.dead_webhooks) alerts.push(`<a class="alert" href="#/webhooks"><span class="dot" style="background:var(--bad)"></span><b>${num(ex.dead_webhooks)}</b> webhooks dead-lettered</a>`);
+      const unhealthy = (d.psps || []).filter((b) => b.health && (b.health.circuit_open || !b.enabled));
+      unhealthy.forEach((b) => alerts.unshift(`<a class="alert" href="#/banks"><span class="dot" style="background:var(--bad)"></span><b>${esc(b.name)}</b> ${b.enabled ? "circuit open, traffic failing over" : "disabled"}</a>`));
+      const tdOk = d.td_rate < 0.01;
+      const typeColors = { INTENT: "#2a78d6", QR: "#1baf7a", COLLECT: "#eb6834", MANDATE_DEBIT: "#6250d6" };
+      const declTotal = d.declines.reduce((a, c) => a + c.count, 0) || 1;
+      $("#ov").innerHTML = `
+        ${alerts.length ? `<div class="alerts">${alerts.join("")}</div>` : ""}
+        <div class="grid g-kpi">
+          <div class="card kpi"><div class="l">Successful volume</div><div class="v">${inrShort(t.volume_paise)}</div>
+            <div class="d">${delta(t.volume_paise, p.volume_paise)}<span>vs ${inrShort(p.volume_paise)}</span></div><div class="spark">${spark(d.series.map((b) => b.volume_paise))}</div></div>
+          <div class="card kpi"><div class="l">Transactions</div><div class="v">${numShort(t.count)}</div>
+            <div class="d">${delta(t.count, p.count)}<span>${num(t.unique_payers)} unique payers</span></div><div class="spark">${spark(d.series.map((b) => b.count))}</div></div>
+          <div class="card kpi"><div class="l">Success rate</div><div class="v">${pct(d.success_rate)}</div>
+            <div class="d">${delta(d.success_rate, d.prev_success_rate, { points: true })}<span title="Excludes customer-caused business declines">technical SR ${pct(techSR)}</span></div><div class="spark">${spark(srSeries, "var(--ok)")}</div></div>
+          <div class="card kpi"><div class="l">Technical declines</div><div class="v">${pct(d.td_rate)}</div>
+            <div class="d">${delta(d.td_rate, d.prev_td_rate, { points: true, invert: true })}<span class="target ${tdOk ? "ok" : "bad"}">${tdOk ? "within" : "above"} 1% target</span></div><div class="spark">${spark(tdSeries, "var(--td)")}</div></div>
+          <div class="card kpi"><div class="l">Average ticket</div><div class="v">${inrShort(d.avg_ticket_paise)}</div>
+            <div class="d">${delta(d.avg_ticket_paise, d.prev_avg_ticket_paise)}<span>refunds ${inrShort(d.refunds.paise)}</span></div><div class="spark">${spark(d.series.map((b) => b.success ? b.volume_paise / b.success : null))}</div></div>
+          <div class="card kpi"><div class="l">Live throughput</div><div class="v">${num(d.live.last_minute)}<small>/min</small></div>
+            <div class="d"><span>${d.live.tps.toFixed(2)} TPS · SR ${d.live.count_15m ? pct(d.live.success_rate_15m, 1) : "—"} (15 min)</span></div>
+            <div class="spark"><div class="small muted" style="margin-top:8px">${num(d.live.count_15m)} payments in the last 15 minutes</div></div></div>
+        </div>
+        <div class="grid g-3-1">
+          <div class="card"><header><div><h3>Payment volume</h3><div class="sub">Successful value per ${hourly ? "hour" : "day"}, IST</div></div><span class="spacer"></span>
+            <div class="legend"><span><i style="background:var(--s1)"></i>Volume</span></div></header><div class="body"><div class="chart" id="ch-vol"></div></div></div>
+          <div class="card"><header><div><h3>Value lost to technical declines</h3><div class="sub">Payments the banks or network failed, not the customer</div></div></header>
+            <div class="body"><div class="kpi" style="padding:0"><div class="v" style="color:var(--td)">${inrShort(d.td_lost_paise)}</div>
+              <div class="d">${num(d.technical_declines)} payments · ${pct(d.td_rate)} of attempts</div></div>
+              <div style="margin-top:18px" class="small muted">Payment mix</div>
+              <div class="mix">${d.types.map((g) => `<i style="width:${g.share * 100}%;background:${typeColors[g.key] || "var(--faint)"}" title="${esc(TYPES[g.key] || g.key)}"></i>`).join("")}</div>
+              <table class="t" style="font-size:12.5px"><tbody>${d.types.map((g) => `<tr><td style="padding:6px 0"><span class="row"><i style="width:10px;height:10px;border-radius:3px;background:${typeColors[g.key] || "var(--faint)"}"></i>${esc(TYPES[g.key] || g.key)}</span></td>
+                <td class="r" style="padding:6px 0">${pct(g.share, 1)}</td><td class="r" style="padding:6px 0" title="Success rate">${pct(g.success_rate, 1)} SR</td></tr>`).join("")}</tbody></table>
+            </div></div>
+        </div>
+        <div class="grid g-2">
+          <div class="card"><header><div><h3>Success rate</h3><div class="sub">Approved ÷ attempted, per ${hourly ? "hour" : "day"}</div></div><span class="spacer"></span>
+            <div class="legend"><span><i class="line" style="background:var(--ok)"></i>Success rate</span></div></header><div class="body"><div class="chart" id="ch-sr"></div></div></div>
+          <div class="card"><header><div><h3>Declines by cause</h3><div class="sub">NPCI targets: TD &lt; 1%, BD &lt; 5%</div></div><span class="spacer"></span>
+            <div class="legend"><span><i class="line" style="background:var(--td)"></i>Technical (TD)</span><span><i class="line" style="background:var(--bd)"></i>Business (BD)</span><span><i class="dash"></i>Target</span></div></header>
+            <div class="body"><div class="chart" id="ch-decl"></div></div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px"><header><div><h3>Sponsor bank performance</h3><div class="sub">Share of traffic, success, technical declines and time to final status</div></div><span class="spacer"></span><a class="small" href="#/banks">Bank health ${ic("arrow", 'style="width:14px;height:14px;display:inline;vertical-align:-2px"')}</a></header>
+          <div class="body flush table-wrap"><table class="t"><thead><tr><th>Bank</th><th>Routing</th><th class="r">Transactions</th><th>Share</th><th class="r">Success rate</th><th class="r">TD rate</th><th class="r">p50</th><th class="r">p95</th><th class="r">Volume</th></tr></thead><tbody>
+          ${d.psps.map((b) => { const h = b.health || {}; const st = !b.enabled ? pill("SUSPENDED").replace("Suspended", "Disabled") : h.circuit_open ? '<span class="pill bad">Circuit open</span>' : '<span class="pill ok">Healthy</span>';
+            return `<tr><td><div class="row"><span class="bank-ic" style="background:${hueFor(b.key)}">${esc(initials(b.name))}</span><div class="stack" style="gap:0"><b>${esc(b.name)}</b><span class="sub mono">${esc(b.key)}</span></div></div></td>
+            <td>${st}</td><td class="r">${num(b.count)}</td><td><div class="row"><div class="bar" style="width:90px"><i style="width:${b.share * 100}%"></i></div><span class="small muted">${pct(b.share, 0)}</span></div></td>
+            <td class="r"><b>${b.count ? pct(b.success_rate) : "—"}</b></td><td class="r" style="color:${b.td_rate >= 0.01 ? "var(--bad)" : "inherit"}">${b.count ? pct(b.td_rate) : "—"}</td>
+            <td class="r">${b.p50_ms ? ms(b.p50_ms) : "—"}</td><td class="r">${b.p95_ms ? ms(b.p95_ms) : "—"}</td><td class="r">${inrShort(b.volume_paise)}</td></tr>`; }).join("")}
+          </tbody></table></div></div>
+        <div class="grid g-2">
+          <div class="card"><header><div><h3>Top decline reasons</h3><div class="sub">${num(d.technical_declines + d.business_declines)} failed payments by NPCI response code</div></div></header>
+            <div class="body flush table-wrap"><table class="t"><thead><tr><th>Code</th><th>Reason</th><th>Caused by</th><th class="r">Count</th><th>Share</th></tr></thead><tbody>
+            ${d.declines.slice(0, 9).map((c) => { const [label, , party] = codeInfo(c.code, c.reason);
+              return `<tr class="click" data-code="${esc(c.code)}"><td><span class="code">${esc(c.code || "—")}</span> ${kindTag(c.kind)}</td><td class="ellipsis" style="max-width:240px">${esc(label)}</td><td class="muted">${esc(party || "—")}</td>
+              <td class="r">${num(c.count)}</td><td><div class="bar ${c.kind === "TD" ? "td" : "bd"}" style="width:90px"><i style="width:${c.count / declTotal * 100}%"></i></div></td></tr>`; }).join("") || `<tr><td colspan="5">${empty("No declines in this period")}</td></tr>`}
+            </tbody></table></div></div>
+          <div class="card"><header><div><h3>Payment gateways</h3><div class="sub">Ranked by successful volume</div></div><span class="spacer"></span><a class="small" href="#/gateways">Manage ${ic("arrow", 'style="width:14px;height:14px;display:inline;vertical-align:-2px"')}</a></header>
+            <div class="body flush table-wrap"><table class="t"><thead><tr><th>Gateway</th><th class="r">Transactions</th><th class="r">Success rate</th><th class="r">Volume</th><th>Share</th></tr></thead><tbody>
+            ${[...d.tenants].sort((a, b) => b.volume_paise - a.volume_paise).map((g) => `<tr><td><div class="row"><span class="bank-ic" style="background:${hueFor(g.key)};width:26px;height:26px;font-size:11px">${esc(initials(g.name))}</span><b>${esc(g.name)}</b></div></td>
+              <td class="r">${num(g.count)}</td><td class="r">${pct(g.success_rate)}</td><td class="r"><b>${inrShort(g.volume_paise)}</b></td>
+              <td><div class="bar" style="width:90px"><i style="width:${g.share * 100}%"></i></div></td></tr>`).join("") || `<tr><td colspan="5">${empty("No traffic in this period")}</td></tr>`}
+            </tbody></table></div></div>
+        </div>
+        <div class="card"><header><div><h3>Latest transactions</h3><div class="sub">Streaming from the ledger</div></div><span class="spacer"></span><a class="small" href="#/transactions">All transactions ${ic("arrow", 'style="width:14px;height:14px;display:inline;vertical-align:-2px"')}</a></header>
+          <div class="body flush table-wrap">${txnTable(feed, { seen, compact: true })}</div></div>`;
+      $$("#ov [data-code]").forEach((r) => r.onclick = () => go("transactions", { status: "FAILED", code: r.dataset.code }));
+      bindTxnRows($("#ov"));
+      const draw = () => {
+        const vol = $("#ch-vol"), sr = $("#ch-sr"), dc = $("#ch-decl"); if (!vol) return;
+        lineChart(vol, { x, xFmt, tipTitle, fmt: (v, axis) => inrShort(v), series: Object.assign([{ id: "vol", name: "Volume", color: "var(--s1)", values: d.series.map((b) => b.volume_paise), area: true }],
+          { extra: (i) => `<div><span>Transactions</span><span>${num(d.series[i].count)}</span></div>` }), height: 260 });
+        lineChart(sr, { x, xFmt, tipTitle, fmt: (v, axis) => axis ? (v * 100).toFixed(0) + "%" : pct(v), yMin: "auto", yMax: 1,
+          series: Object.assign([{ id: "sr", name: "Success rate", color: "var(--ok)", values: srSeries }], { extra: (i) => `<div><span>Attempts</span><span>${num(d.series[i].count)}</span></div>` }) });
+        const mx = Math.max(0.06, ...tdSeries.filter((v) => v != null), ...bdSeries.filter((v) => v != null));
+        lineChart(dc, { x, xFmt, tipTitle, fmt: (v, axis) => axis ? (v * 100).toFixed(1) + "%" : pct(v), yMax: niceMax(mx * 1.05), refs: [{ v: 0.01, label: "TD target 1%" }, { v: 0.05, label: "BD target 5%" }],
+          series: [{ id: "td", name: "Technical (TD)", color: "var(--td)", values: tdSeries }, { id: "bd", name: "Business (BD)", color: "var(--bd)", values: bdSeries }] });
+      };
+      S.redraw = draw; draw();
+    }
+    await load();
+    every(() => load(true), 15000);
+    every(() => { $("#ov-upd") && ($("#ov-upd").textContent = "Updated " + ago(loadedAt)); }, 1000);
+    setLive("Live · auto-refresh 15s");
   };
-  const bind = {
-    "Tenants": () => $("#onboard").onclick = async () => {
-      try { const d = await api("POST", "/admin/tenants", { name: $("#tn").value, vpa_prefix: $("#tp").value, webhook_url: $("#tw").value });
-        $("#out").textContent = JSON.stringify({ tenant_id: d.tenant.tenant_id, api_key_id: d.api_key_id, hmac_secret: d.hmac_secret, webhook_secret: d.webhook_secret }, null, 2);
-      } catch (e) { $("#out").textContent = e.message; }
-    },
-    "Transactions": () => $("#filter").onclick = () => { window._st = $("#st").value; show("Transactions"); },
-    "Webhooks": () => document.querySelectorAll("[data-replay]").forEach(b => b.onclick = async () => { await api("POST", `/admin/webhooks/${b.dataset.replay}/replay`); show("Webhooks"); }),
-    "Recon": () => {
-      const render = (items) => $("#rout").innerHTML = table(items, [["Tenant","tenant_id"],["Txn","txn_id"],["Kind","kind"],["Category","category"],["Ledger","ledger_status"],["Bank","bank_status"],["NPCI","npci_status"],["Action","action"]]);
-      $("#runrecon").onclick = async () => { try { const d = await api("POST", "/admin/recon/run", { date: $("#rd").value }); render(d.exceptions); } catch (e) { $("#rout").textContent = e.message; } };
-      $("#viewrecon").onclick = async () => { try { const d = await api("GET", "/admin/recon?all=true&date=" + $("#rd").value); render(d.items); } catch (e) { $("#rout").textContent = e.message; } };
-    },
-    "Settlements": () => $("#runsettle").onclick = async () => {
-      try { const d = await api("POST", "/admin/settlements/run", { date: $("#sd").value });
-        $("#sout").innerHTML = table(d.settlements, [["Tenant","tenant_id"],["Merchant","merchant_id"],["Settle date", r => String(r.settle_date).slice(0,10)],["Txns","txn_count"],["Gross ₹", r => (r.gross_paise/100).toFixed(2)],["Refunds ₹", r => (r.refund_paise/100).toFixed(2)],["Fees ₹", r => (r.fee_paise/100).toFixed(2)],["Net ₹", r => (r.net_paise/100).toFixed(2)],["Status","status"]]);
-      } catch (e) { $("#sout").textContent = e.message; }
-    },
+
+  // ---------- Transactions
+  function txnTable(rows, { seen, compact } = {}) {
+    if (!rows.length) return empty("No transactions match", "Try a different filter or date.");
+    return `<table class="t"><thead><tr><th>Time</th><th>Transaction</th>${compact ? "" : "<th>Gateway</th>"}<th>Merchant</th><th>Payer</th><th class="r">Amount</th>${compact ? "" : "<th>Type</th>"}<th>Bank</th><th>Status</th>${compact ? "" : "<th>Code</th>"}</tr></thead><tbody>
+      ${rows.map((t) => `<tr class="click${seen && !seen.has(t.txn_id) ? " fresh" : ""}" data-txn="${esc(t.txn_id)}">
+        <td><div class="stack" style="gap:0"><span>${esc(ago(t.created_at))}</span><span class="sub">${esc(dt(t.created_at))}</span></div></td>
+        <td><div class="stack" style="gap:0"><span class="mono">${esc(short(t.txn_id, 14))}</span><span class="sub mono">${esc(t.rrn ? "RRN " + t.rrn : t.merchant_ref)}</span></div></td>
+        ${compact ? "" : `<td>${esc(tName(t.tenant_id))}</td>`}
+        <td><div class="stack" style="gap:0"><span>${esc(t.payee_name || t.merchant_id)}</span><span class="sub mono">${esc(t.payee_vpa)}</span></div></td>
+        <td class="mono">${esc(t.payer_vpa || "—")}</td>
+        <td class="r"><b>${esc(inrRupees(t.amount))}</b></td>
+        ${compact ? "" : `<td>${esc(TYPES[t.type] || t.type)}</td>`}
+        <td>${esc(pName(t.psp))}</td><td>${pill(t.status)}</td>
+        ${compact ? "" : `<td>${t.resp_code && t.resp_code !== "00" ? `<span class="code" title="${esc(codeInfo(t.resp_code, t.resp_reason)[0])}">${esc(t.resp_code)}</span>` : '<span class="faint">—</span>'}</td>`}
+      </tr>`).join("")}</tbody></table>`;
+  }
+  function bindTxnRows(root) { $$("[data-txn]", root).forEach((r) => r.onclick = () => openTxn(r.dataset.txn)); }
+  async function openTxn(id) {
+    openDrawer(`<header><div class="skeleton" style="height:60px;flex:1"></div></header>`);
+    let d;
+    try { d = await api("GET", "/admin/txns/" + encodeURIComponent(id)); } catch (e) { openDrawer(`<header><h3>Transaction</h3></header><div class="content">${empty(e.message)}</div>`); return; }
+    const t = d.transaction, [label, kind, party] = codeInfo(t.resp_code, t.resp_reason);
+    const ev = d.events || [];
+    const first = ev.length ? new Date(ev[0].at) : new Date(t.created_at);
+    const nodeCls = (s) => ({ SUCCESS: "ok", FAILED: "bad", PENDING: "warn", DEEMED: "violet", INITIATED: "info" }[s] || "");
+    const evLabel = (e) => ({ INITIATED: "Payment initiated", PENDING: "Sent to payer PSP", SUCCESS: "Payment approved", FAILED: "Payment declined", DEEMED: "Marked deemed" }[e.to] || e.to);
+    const srcLabel = { api: "Gateway API", callback: "Bank callback (RespPay)", chktxn: "Status check (ReqChkTxn)", recon: "T+1 reconciliation", admin: "Operator" };
+    const srcText = (src) => { const m = /^chktxn (\d+)\/(\d+)$/.exec(src || ""); return m ? `Status check ${m[1]} of ${m[2]} (ReqChkTxn)` : (srcLabel[src] || src); };
+    const evTitle = (e, i) => i > 0 && ev[i - 1].to === e.to ? (/^chktxn/.test(e.source) ? "Bank says still pending" : "Updated") : evLabel(e);
+    const final = t.status === "SUCCESS" || t.status === "FAILED";
+    // Mirrors the server's NPCI status-check rules so the button only shows when a check will actually run.
+    const sc = S.rules.status_checks, age = (Date.now() - new Date(t.created_at)) / 1000;
+    const checkable = (t.status === "PENDING" || (t.status === "INITIATED" && (t.type === "COLLECT" || t.type === "MANDATE_DEBIT")))
+      && (t.check_attempts || 0) < sc.max_checks && age < sc.window_minutes * 60 && age >= sc.first_after_seconds;
+    openDrawer(`<header><div style="flex:1;min-width:0"><div class="row" style="gap:10px">${pill(t.status)}<span class="small muted">${esc(TYPES[t.type] || t.type)} · ${esc(dt(t.created_at))} IST</span></div>
+        <div class="amount-hero" style="margin-top:8px">${esc(inrRupees(t.amount))}</div><div class="small muted mono">${esc(t.txn_id)} ${copyBtn(t.txn_id)}</div></div>
+        <button class="btn ghost icon-btn" data-close aria-label="Close">${ic("x")}</button></header>
+      <div class="content">
+        ${t.status === "FAILED" || t.status === "DEEMED" ? `<div class="note ${kind === "TD" ? "warn" : "info"}">${ic(kind === "TD" ? "warn" : "info")}<div><b><span class="code">${esc(t.resp_code)}</span> ${esc(label)}</b> ${kindTag(kind)}<div>${kind === "TD" ? "Technical decline: counts against the bank's TD rate and feeds the router's health score." : kind === "BD" ? "Business decline: caused by " + esc((party || "the customer").toLowerCase()) + ", not by the switch or the bank link." : esc(t.resp_reason || "")}</div></div></div>` : ""}
+        <div><h5>Parties</h5><div class="parties">
+          <div class="party"><small>Payer</small><b class="mono">${esc(t.payer_vpa || "Not yet known")}</b><small>VPA masked and tokenised in the vault</small></div>
+          <div class="faint">${ic("arrow", 'style="width:18px;height:18px"')}</div>
+          <div class="party"><small>Payee · ${esc(tName(t.tenant_id))}</small><b>${esc(t.payee_name || t.merchant_id)}</b><span class="mono small">${esc(t.payee_vpa)}</span></div></div></div>
+        <div><h5>Details</h5><dl class="kv">
+          <dt>RRN</dt><dd class="mono">${t.rrn ? esc(t.rrn) + copyBtn(t.rrn) : "—"}</dd>
+          <dt>Merchant reference</dt><dd class="mono">${esc(t.merchant_ref)}${copyBtn(t.merchant_ref)}</dd>
+          <dt>Gateway</dt><dd>${esc(tName(t.tenant_id))} <span class="faint mono">${esc(t.tenant_id)}</span></dd>
+          <dt>Merchant</dt><dd><a href="#" data-mer>${esc(t.merchant_id)}</a> · MCC ${esc(t.mcc || "—")}</dd>
+          <dt>Sponsor bank</dt><dd>${esc(pName(t.psp))}</dd>
+          <dt>Response code</dt><dd>${t.resp_code ? `<span class="code">${esc(t.resp_code)}</span> ${esc(label)}` : "—"}</dd>
+          <dt>Time to final status</dt><dd>${final ? ms(new Date(t.updated_at) - new Date(t.created_at)) : "—"}</dd>
+          <dt>Intent expires</dt><dd>${esc(dt(t.expires_at))}</dd>
+        </dl></div>
+        <div><h5>Timeline</h5><ol class="timeline">${ev.map((e, i) => `<li><span class="node ${nodeCls(e.to)}"></span><div><b>${esc(evTitle(e, i))}</b><div class="small muted">${esc(srcText(e.source))}${e.detail && e.detail !== "created" ? " · " + esc(e.detail) : ""}</div></div>
+          <small class="num">${esc(hFmt.format(new Date(e.at)))}:${String(new Date(e.at).getSeconds()).padStart(2, "0")}<br>+${esc(ms(new Date(e.at) - first))}</small></li>`).join("")}</ol></div>
+        ${(d.refunds || []).length ? `<div><h5>Refunds</h5><table class="t"><tbody>${d.refunds.map((r) => `<tr><td class="mono">${esc(short(r.refund_id, 14))}</td><td>${esc(r.mode)}</td><td class="r"><b>${esc(inrRupees(r.amount))}</b></td><td>${pill(r.status)}</td><td class="muted">${esc(dt(r.created_at))}</td></tr>`).join("")}</tbody></table></div>` : ""}
+        <div class="row" style="flex-wrap:wrap">${checkable && can("ops") ? `<button class="btn primary" data-check>${ic("refresh")}Check status with bank (check ${(t.check_attempts || 0) + 1} of ${sc.max_checks})</button>` : ""}
+          ${t.status === "SUCCESS" && can("ops") ? `<button class="btn" data-refund>${ic("refunds")}Refund</button>` : ""}
+          <button class="btn" data-raw>View raw JSON</button></div>
+        <pre class="json" data-json hidden>${esc(JSON.stringify(d, null, 2))}</pre>
+      </div>`);
+    $("#drawer [data-close]").onclick = closeDrawer;
+    $("#drawer [data-raw]").onclick = () => { const p = $("#drawer [data-json]"); p.hidden = !p.hidden; };
+    $("#drawer [data-mer]").onclick = (e) => e.preventDefault() || openMerchant(t.tenant_id, t.merchant_id, () => openTxn(id));
+    const rf = $("#drawer [data-refund]");
+    if (rf) rf.onclick = () => {
+      const refunded = (d.refunds || []).filter((r) => r.status !== "FAILED").reduce((a, r) => a + Math.round(r.amount * 100), 0), left = Math.round(t.amount * 100) - refunded;
+      const b = modal(`<header><h3>Refund this payment</h3><p>${esc(inr(left))} of ${esc(inrRupees(t.amount))} can still be refunded. The refund goes back to the payer through ${esc(pName(t.psp))} and ${esc(tName(t.tenant_id))} is told by webhook.</p></header>
+        <div class="content"><label class="field"><span>Amount (₹)</span><input class="input" id="rf-a" inputmode="decimal" value="${(left / 100).toFixed(2)}"></label>
+        <label class="field"><span>Reason</span><input class="input" id="rf-r" placeholder="Shown in the audit log, for example: customer complaint CRM-4812"></label></div>
+        <footer><button class="btn" data-no>Cancel</button><button class="btn primary" data-yes>Refund</button></footer>`);
+      $("[data-no]", b).onclick = closeModal;
+      $("[data-yes]", b).onclick = async (e) => {
+        e.target.disabled = true;
+        try { const r = await api("POST", "/admin/refunds", { txn_id: t.txn_id, amount: $("#rf-a", b).value.trim(), reason: $("#rf-r", b).value.trim() }); closeModal(); toast("Refund " + (STATUS[r.status] ? STATUS[r.status][1].toLowerCase() : r.status)); openTxn(id); }
+        catch (x) { toast(x.message, true); e.target.disabled = false; }
+      };
+    };
+    const chk = $("#drawer [data-check]");
+    if (chk) chk.onclick = async () => { chk.disabled = true; try { const r = await api("POST", `/admin/txns/${encodeURIComponent(id)}/check`); toast("Bank says " + r.status); openTxn(id); } catch (e) { toast(e.message, true); chk.disabled = false; } };
+  }
+  PAGES.transactions = async (view, params) => {
+    const f = { q: params.get("q") || "", status: params.get("status") || "", tenant: params.get("tenant") || "", psp: params.get("psp") || "", type: params.get("type") || "", code: params.get("code") || "" };
+    let offset = 0, live = false, seen = null;
+    const limit = 50;
+    const statuses = [["", "All"], ["SUCCESS", "Success"], ["FAILED", "Failed"], ["PENDING", "Pending"], ["DEEMED", "Deemed"], ["INITIATED", "Initiated"]];
+    view.innerHTML = `<div class="toolbar">
+        <div class="search" style="width:280px">${ic("search")}<input class="input" id="tx-q" placeholder="Txn ID, RRN or merchant ref" value="${esc(f.q)}"></div>
+        <div class="chips" id="tx-st">${statuses.map(([k, l]) => `<button class="chip ${k === f.status ? "on" : ""}" data-s="${k}">${l}</button>`).join("")}</div>
+        <span class="spacer"></span>
+        <button class="btn sm" id="tx-live">${ic("play")}Live</button>
+        <button class="btn sm" id="tx-csv">${ic("download")}Export</button></div>
+      <div class="toolbar">${tenantSelect("tx-t", f.tenant)}
+        <select class="input" id="tx-p"><option value="">All banks</option>${S.psps.map((p) => `<option value="${esc(p.psp_id)}" ${p.psp_id === f.psp ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+        <select class="input" id="tx-y"><option value="">All types</option>${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${k === f.type ? "selected" : ""}>${l}</option>`).join("")}</select>
+        ${f.code ? `<span class="chip on" id="tx-code">Code ${esc(f.code)} ✕</span>` : ""}</div>
+      <div class="card"><div class="table-wrap" id="tx-body"></div><div class="pager" id="tx-pager"></div></div>`;
+    let rows = [];
+    async function load() {
+      const qs = new URLSearchParams({ limit: f.code ? 1000 : limit, offset: f.code ? 0 : offset });
+      for (const k of ["q", "status", "tenant", "psp", "type"]) if (f[k]) qs.set(k, f[k]);
+      const d = await api("GET", "/admin/txns?" + qs);
+      rows = f.code ? d.transactions.filter((t) => t.resp_code === f.code).slice(0, limit) : d.transactions;
+      $("#tx-body").innerHTML = txnTable(rows, { seen });
+      seen = new Set(rows.map((t) => t.txn_id));
+      bindTxnRows($("#tx-body"));
+      const total = f.code ? rows.length : d.total;
+      $("#tx-pager").innerHTML = f.code ? `<span>Latest ${num(rows.length)} failed payments with code ${esc(f.code)}</span>` :
+        `<span>${total ? num(offset + 1) + "–" + num(offset + rows.length) + " of " + num(total) : "0 results"}</span><span class="row"><button class="btn sm" id="pg-prev" ${offset ? "" : "disabled"}>Previous</button><button class="btn sm" id="pg-next" ${offset + limit < total ? "" : "disabled"}>Next</button></span>`;
+      $("#pg-prev") && ($("#pg-prev").onclick = () => { offset = Math.max(0, offset - limit); load(); });
+      $("#pg-next") && ($("#pg-next").onclick = () => { offset += limit; load(); });
+      if (f.q && rows.length === 1 && offset === 0 && !live) openTxn(rows[0].txn_id);
+    }
+    const sync = () => { const p = {}; for (const k in f) if (f[k]) p[k] = f[k]; history.replaceState(null, "", "#/transactions" + (Object.keys(p).length ? "?" + new URLSearchParams(p) : "")); offset = 0; seen = null; load(); };
+    $$("#tx-st .chip").forEach((c) => c.onclick = () => { f.status = c.dataset.s; $$("#tx-st .chip").forEach((x) => x.classList.toggle("on", x === c)); sync(); });
+    let qt; $("#tx-q").oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value.trim(); sync(); }, 300); };
+    $("#tx-t").onchange = (e) => { f.tenant = e.target.value; sync(); };
+    $("#tx-p").onchange = (e) => { f.psp = e.target.value; sync(); };
+    $("#tx-y").onchange = (e) => { f.type = e.target.value; sync(); };
+    $("#tx-code") && ($("#tx-code").onclick = () => { f.code = ""; $("#tx-code").remove(); sync(); });
+    $("#tx-live").onclick = () => {
+      live = !live; $("#tx-live").innerHTML = live ? ic("pause") + "Pause" : ic("play") + "Live"; $("#tx-live").classList.toggle("primary", live);
+      if (live) { offset = 0; load(); S.liveTimer = setInterval(() => !document.hidden && load(), 4000); S.timers.push(S.liveTimer); setLive("Live · streaming every 4s"); }
+      else { clearInterval(S.liveTimer); setLive("Live"); }
+    };
+    $("#tx-csv").onclick = () => {
+      const cols = ["txn_id", "created_at", "tenant_id", "merchant_ref", "type", "status", "amount", "payee_vpa", "payer_vpa", "psp", "rrn", "resp_code", "resp_reason"];
+      const csv = [cols.join(",")].concat(rows.map((r) => cols.map((c) => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(","))).join("\n");
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "transactions-" + today() + ".csv"; a.click();
+    };
+    setLive("Live");
+    await load();
   };
-  $("#tabs").innerHTML = tabs.map(t => `<button>${t}</button>`).join("");
-  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => show(b.textContent));
-  $("#token").value = token;
-  $("#save").onclick = () => { token = $("#token").value; try { sessionStorage.setItem("atf_token", token); } catch (e) {} show("Tenants"); };
-  if (token) show("Tenants");
+
+  // ---------- Sponsor banks
+  PAGES.banks = async (view) => {
+    const [p, ov, inc] = await Promise.all([api("GET", "/admin/psps"), api("GET", "/admin/stats/overview?range=24h"), api("GET", "/admin/incidents")]);
+    const incidents = inc.incidents || [], activeInc = Object.fromEntries(incidents.filter((i) => i.status === "ACTIVE").map((i) => [i.psp_id, i]));
+    const stat = Object.fromEntries(ov.psps.map((b) => [b.key, b]));
+    const health = Object.fromEntries((p.health || []).map((h) => [h.psp_id, h]));
+    const card = (b) => {
+      const h = health[b.psp_id] || {}, s = stat[b.psp_id] || {};
+      const state = !b.enabled ? '<span class="pill neutral">Disabled</span>' : h.circuit_open ? '<span class="pill bad">Circuit open</span>' : activeInc[b.psp_id] ? '<span class="pill warn">Degraded</span>' : '<span class="pill ok">Healthy</span>';
+      return `<div class="card bank"><div class="row"><span class="bank-ic" style="background:${hueFor(b.psp_id)}">${esc(initials(b.name))}</span><div style="min-width:0"><h4>${esc(b.name)}</h4><div class="meta mono">${esc(b.psp_id)} · @${esc(b.handle)}</div></div><span class="spacer" style="flex:1"></span>${state}</div>
+        <div class="big">${s.count ? pct(s.success_rate) : "—"}</div><div class="small muted">success rate, last 24 hours · ${num(s.count || 0)} payments</div>
+        <dl class="kv">
+          <dt>Share of traffic</dt><dd>${pct(s.share || 0, 1)}</dd>
+          <dt>Technical decline rate</dt><dd style="color:${(s.td_rate || 0) >= 0.01 ? "var(--bad)" : "inherit"}">${pct(s.td_rate || 0)}</dd>
+          <dt>Time to final status</dt><dd>p50 ${s.p50_ms ? ms(s.p50_ms) : "—"} · p95 ${s.p95_ms ? ms(s.p95_ms) : "—"}</dd>
+          <dt>Router score (live)</dt><dd>${h.score != null ? h.score.toFixed(2) : "—"}</dd>
+          <dt>Live success (EWMA)</dt><dd>${h.samples ? pct(h.success_rate, 1) : "warming up"}</dd>
+          <dt>Live latency (EWMA)</dt><dd>${h.samples ? ms(h.latency_ms) : "—"}</dd>
+          <dt>Cost</dt><dd>${esc(b.cost_bps)} bps · priority ${esc(b.priority)}</dd>
+          ${h.last_error ? `<dt>Last error</dt><dd class="small" style="color:var(--bad)" title="${esc(h.last_error)}">${esc(h.last_error)}</dd>` : ""}
+        </dl></div>`;
+    };
+    view.innerHTML = `<div class="note info" style="margin-bottom:16px">${ic("info")}<div>The router scores each bank continuously on success rate, latency and cost, opens a circuit when a bank keeps failing technically, and fails new payments over to the next-best bank. Heartbeats (ReqHbt) keep the scores fresh when traffic is quiet.</div></div>
+      <div class="grid g-3">${p.psps.map(card).join("")}</div>
+      <div class="card"><header><div><h3>Downtime incidents</h3><div class="sub">Opened automatically at ${pct(inc.policy.open_at, 0)} technical declines over ${esc(inc.policy.window)} (min ${num(inc.policy.min_samples)} payments) or when a circuit opens; every gateway is told by webhook</div></div></header>
+        ${incidents.length ? `<div>${incidents.map((i) => `<div class="incident"><span class="pill ${i.status === "ACTIVE" ? (i.severity === "HIGH" ? "bad" : "warn") : "ok"}">${i.status === "ACTIVE" ? esc(i.severity === "HIGH" ? "Down" : "Degraded") : "Resolved"}</span>
+          <div class="grow"><b>${esc(pName(i.psp_id))}</b> <span class="small muted">${esc(i.reason)}</span><div class="small muted">${esc(dt(i.started_at))} IST${i.resolved_at ? " to " + esc(dt(i.resolved_at)) + " · " + esc(dur(new Date(i.resolved_at) - new Date(i.started_at))) : " · ongoing"} · peak TD ${pct(i.peak_td_rate || i.td_rate, 1)} · ${num(i.affected)} payments affected</div></div></div>`).join("")}</div>` : `<div class="body">${empty("No downtime in the last 30 days")}</div>`}</div>
+      <div class="card"><header><h3>Configured links</h3></header><div class="body flush table-wrap"><table class="t"><thead><tr><th>Bank</th><th>ID</th><th>Handle</th><th>Endpoint</th><th class="r">Cost</th><th class="r">Priority</th><th>Status</th></tr></thead><tbody>
+      ${p.psps.map((b) => `<tr><td><b>${esc(b.name)}</b></td><td class="mono">${esc(b.psp_id)}</td><td class="mono">@${esc(b.handle)}</td><td class="mono small">${esc(b.endpoint)}</td><td class="r">${esc(b.cost_bps)} bps</td><td class="r">${esc(b.priority)}</td><td>${b.enabled ? pill("ACTIVE") : '<span class="pill neutral">Disabled</span>'}</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+    every(() => route(), 30000);
+  };
+
+  // ---------- Payment gateways
+  function secretsBox(title, intro, values) {
+    const b = modal(`<header><h3>${esc(title)}</h3><p>${intro}</p></header><div class="content">
+      <div class="note warn">${ic("key")}<div>These secrets are shown once. Copy them into the gateway's secret store now; the switch keeps only an encrypted copy.</div></div>
+      ${values.map(([k, v]) => `<label class="field">${esc(k)}<div class="secret"><code>${esc(v)}</code>${copyBtn(v)}</div></label>`).join("")}
+      </div><footer><button class="btn primary" data-done>I've saved these</button></footer>`);
+    $("[data-done]", b).onclick = () => { closeModal(); route(); };
+  }
+  PAGES.gateways = async (view) => {
+    const [t, ov] = await Promise.all([api("GET", "/admin/tenants"), api("GET", "/admin/stats/overview?range=24h")]);
+    S.tenants = t.tenants || []; S.tenantName = Object.fromEntries(S.tenants.map((x) => [x.tenant_id, x.name]));
+    const st = Object.fromEntries(ov.tenants.map((g) => [g.key, g]));
+    view.innerHTML = `<div class="toolbar"><span class="muted">${num(S.tenants.length)} gateways onboarded · each gets its own API key, HMAC secret, webhook secret and VPA namespace</span><span class="spacer"></span>
+      ${can("admin") ? `<button class="btn primary" id="gw-new">${ic("plus")}Onboard gateway</button>` : ""}</div>
+      <div class="grid g-3">${S.tenants.map((g) => { const s = st[g.tenant_id] || {};
+        return `<div class="card gw"><div class="gw-head"><span class="gw-ic" style="background:${hueFor(g.tenant_id)}">${esc(initials(g.name))}</span><div style="min-width:0;flex:1"><h4 class="ellipsis">${esc(g.name)}</h4><div class="small muted mono">${esc(g.tenant_id)}</div></div>${pill(g.status)}</div>
+          <div class="gw-stats"><div><small>Volume 24h</small><b>${inrShort(s.volume_paise || 0)}</b></div><div><small>Payments</small><b>${numShort(s.count || 0)}</b></div><div><small>Success</small><b>${s.count ? pct(s.success_rate, 1) : "—"}</b></div></div>
+          <dl class="kv"><dt>VPA namespace</dt><dd class="mono">${esc(g.vpa_prefix)}.*@bank</dd><dt>API key</dt><dd class="mono">${esc(g.api_key_id)}${copyBtn(g.api_key_id)}</dd>
+            <dt>Fee</dt><dd>${esc(g.fee_bps)} bps</dd><dt>Webhook</dt><dd class="mono small" title="${esc(g.webhook_url)}">${esc(g.webhook_url || "not set")}</dd>
+            <dt>Rate limit</dt><dd>${num(g.limits && g.limits.rate_limit_per_sec)} req/s</dd>
+            <dt>Merchant KYC</dt><dd>${g.limits && g.limits.require_kyc ? '<span class="pill ok">Required before payments</span>' : '<span class="pill warn">Not required (sandbox)</span>'}</dd><dt>Onboarded</dt><dd>${esc(dOnly(g.created_at))}</dd></dl>
+          ${can("admin") ? `<footer><button class="btn sm" data-rotate="${esc(g.tenant_id)}">${ic("key")}Rotate keys</button>
+            <button class="btn sm ${g.status === "ACTIVE" ? "danger" : ""}" data-status="${esc(g.tenant_id)}" data-to="${g.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE"}">${g.status === "ACTIVE" ? "Suspend" : "Reactivate"}</button>
+            <button class="btn sm" data-kyc="${esc(g.tenant_id)}" data-on="${g.limits && g.limits.require_kyc ? "" : "1"}">${g.limits && g.limits.require_kyc ? "Allow trading before KYC" : "Require KYC"}</button>
+            <a class="btn sm ghost" href="#/transactions?tenant=${esc(g.tenant_id)}">Transactions</a></footer>` : `<footer><a class="btn sm" href="#/transactions?tenant=${esc(g.tenant_id)}">Transactions</a></footer>`}</div>`; }).join("")}</div>`;
+    $("#gw-new") && ($("#gw-new").onclick = () => {
+      const b = modal(`<header><h3>Onboard a payment gateway</h3><p>Creates the tenant, its credentials and its VPA namespace. No deployment needed.</p></header>
+        <form class="content" id="gw-f">
+          <label class="field">Legal / display name<input class="input" name="name" required placeholder="Acme Payments Pvt Ltd"></label>
+          <label class="field">VPA prefix<input class="input" name="vpa_prefix" required pattern="[a-z][a-z0-9]{1,19}" placeholder="acmepay"><span class="hint">Merchant VPAs become prefix.merchant@bank-handle. Lowercase, 2–20 characters.</span></label>
+          <label class="field">Webhook URL<input class="input" name="webhook_url" type="url" placeholder="https://hooks.acme.example/upi"></label>
+          <label class="field">Platform fee (bps)<input class="input" name="fee_bps" type="number" min="0" max="500" value="20"></label>
+          <label class="check"><input type="checkbox" name="require_kyc" checked> Merchants must pass KYC before taking payments<span class="hint">RBI PA Directions: due diligence before onboarding. Turn off only for a sandbox.</span></label>
+          <div class="login-err" hidden id="gw-err"></div>
+        </form><footer><button class="btn" data-no>Cancel</button><button class="btn primary" data-yes>Create gateway</button></footer>`);
+      $("[data-no]", b).onclick = closeModal;
+      $("[data-yes]", b).onclick = async () => {
+        const f = $("#gw-f"); if (!f.reportValidity()) return;
+        const v = Object.fromEntries(new FormData(f)); v.fee_bps = Number(v.fee_bps || 0); v.require_kyc = !!v.require_kyc;
+        try { const r = await api("POST", "/admin/tenants", v); await loadRefs();
+          secretsBox(`${r.tenant.name} is live`, `Tenant <span class="mono">${esc(r.tenant.tenant_id)}</span> can call the switch now. Share these with the gateway's engineering team over a secure channel.`,
+            [["API key ID (X-Client-Id)", r.api_key_id], ["HMAC signing secret", r.hmac_secret], ["Webhook signing secret", r.webhook_secret]]);
+        } catch (e) { $("#gw-err").textContent = e.message; $("#gw-err").hidden = false; }
+      };
+    });
+    $$("[data-rotate]").forEach((btn) => btn.onclick = async () => {
+      const id = btn.dataset.rotate;
+      if (!await confirmModal({ title: "Rotate keys for " + tName(id) + "?", body: "The current HMAC and webhook secrets stop working immediately. The gateway must deploy the new ones to keep taking payments.", action: "Rotate keys", danger: true })) return;
+      try { const r = await api("POST", `/admin/tenants/${encodeURIComponent(id)}/rotate-keys`); secretsBox("New secrets for " + tName(id), "The previous secrets are revoked.", [["HMAC signing secret", r.hmac_secret], ["Webhook signing secret", r.webhook_secret]]); }
+      catch (e) { toast(e.message, true); }
+    });
+    $$("[data-kyc]").forEach((btn) => btn.onclick = async () => {
+      const id = btn.dataset.kyc, on = !!btn.dataset.on;
+      if (!on && !await confirmModal({ title: "Let " + tName(id) + "'s merchants trade before KYC?", body: "New merchants will be registered on their first payment and can take payments while KYC is pending. RBI expects due diligence before onboarding, so use this only for a sandbox.", action: "Allow", danger: true })) return;
+      try { await api("PATCH", `/admin/tenants/${encodeURIComponent(id)}`, { require_kyc: on }); toast(on ? "KYC now required for " + tName(id) : "KYC no longer required for " + tName(id)); await loadRefs(); route(); } catch (e) { toast(e.message, true); }
+    });
+    $$("[data-status]").forEach((btn) => btn.onclick = async () => {
+      const id = btn.dataset.status, to = btn.dataset.to;
+      if (to === "SUSPENDED" && !await confirmModal({ title: "Suspend " + tName(id) + "?", body: "Every API call from this gateway will be refused, including refunds and status checks, until you reactivate it. Payments already sent to banks still complete and settle.", action: "Suspend gateway", danger: true })) return;
+      try { await api("PATCH", `/admin/tenants/${encodeURIComponent(id)}`, { status: to }); toast(tName(id) + (to === "ACTIVE" ? " reactivated" : " suspended")); route(); } catch (e) { toast(e.message, true); }
+    });
+  };
+
+  // ---------- Settlements
+  PAGES.settlements = async (view, params) => {
+    const date = params.get("date") || today();
+    view.innerHTML = `<div class="toolbar"><label class="row small muted">Settlement date <input class="input" type="date" id="st-d" value="${esc(date)}" max="${today()}"></label>
+      ${tenantSelect("st-t", params.get("tenant") || "")}<span class="spacer"></span>
+      <a class="btn" id="st-csv" href="#">${ic("download")}Payout file</a>
+      ${can("ops") ? `<button class="btn primary" id="st-run">Compute settlement</button>` : ""}</div><div id="st-body"></div>`;
+    const tenant = () => $("#st-t").value;
+    async function load() {
+      const d = $("#st-d").value;
+      $("#st-csv").href = `/admin/settlements?format=csv&date=${encodeURIComponent(d)}&tenant=${encodeURIComponent(tenant())}`;
+      const r = await api("GET", `/admin/settlements?date=${encodeURIComponent(d)}&tenant=${encodeURIComponent(tenant())}`);
+      const lines = r.settlements || [];
+      const sum = (k) => lines.reduce((a, l) => a + l[k], 0);
+      const paid = lines.filter((l) => l.status === "PAID").length;
+      const business = new Date(new Date(d + "T00:00:00Z").getTime() - 864e5).toISOString().slice(0, 10);
+      $("#st-body").innerHTML = `<div class="grid g-4">
+          <div class="card kpi"><div class="l">Net payable</div><div class="v">${inrShort(sum("net_paise"))}</div><div class="d">${num(lines.length)} merchant lines · business date ${esc(dOnly(business + "T12:00:00Z"))}</div></div>
+          <div class="card kpi"><div class="l">Gross collected</div><div class="v">${inrShort(sum("gross_paise"))}</div><div class="d">${num(sum("txn_count"))} successful payments</div></div>
+          <div class="card kpi"><div class="l">Refunds & fees deducted</div><div class="v">${inrShort(sum("refund_paise") + sum("fee_paise"))}</div><div class="d">refunds ${inrShort(sum("refund_paise"))} · fees ${inrShort(sum("fee_paise"))}</div></div>
+          <div class="card kpi"><div class="l">Payout status</div><div class="v">${num(paid)}<small> / ${num(lines.length)} paid</small></div><div class="d">${lines.length - paid ? `<span class="pill warn">${num(lines.length - paid)} awaiting payout</span>` : lines.length ? '<span class="pill ok">All paid out</span>' : "—"}</div></div></div>
+        <div class="card"><div class="table-wrap">${lines.length ? `<table class="t"><thead><tr><th>Gateway</th><th>Merchant</th><th class="r">Payments</th><th class="r">Gross</th><th class="r">Refunds</th><th class="r">Fees</th><th class="r">Net payable</th><th class="r">Held by recon</th><th>Status</th><th>UTR / payout</th></tr></thead><tbody>
+          ${lines.map((l) => `<tr><td>${esc(tName(l.tenant_id))}</td><td class="mono">${esc(l.merchant_id)}</td><td class="r">${num(l.txn_count)}</td><td class="r">${inr(l.gross_paise)}</td><td class="r">${inr(l.refund_paise)}</td><td class="r">${inr(l.fee_paise)}</td>
+            <td class="r"><b>${inr(l.net_paise)}</b></td><td class="r">${l.held_count ? `<span class="pill warn" title="Amount or status differs from the bank or NPCI file; paid out once resolved">${num(l.held_count)} · ${inr(l.held_paise)}</span>` : '<span class="faint">—</span>'}</td><td>${pill(l.status)}</td><td class="${l.payout_ref ? "mono small" : ""}">${l.payout_ref ? esc(l.payout_ref) : can("ops") ? `<button class="btn sm" data-pay="${esc(l.settlement_id)}">Record UTR</button>` : "—"}</td></tr>`).join("")}
+          </tbody></table>` : empty("No settlement lines for this date", "Settlement for a business date is computed the next day (T+1).")}</div></div>`;
+      $$("[data-pay]").forEach((b) => b.onclick = () => {
+        const m = modal(`<header><h3>Record payout</h3><p>Enter the UTR from the payout bank for this settlement line.</p></header><div class="content"><label class="field">UTR / payout reference<input class="input" id="utr" placeholder="UTR2610180001"></label></div>
+          <footer><button class="btn" data-no>Cancel</button><button class="btn primary" data-yes>Mark paid</button></footer>`);
+        $("[data-no]", m).onclick = closeModal;
+        $("[data-yes]", m).onclick = async () => { try { await api("POST", `/admin/settlements/${encodeURIComponent(b.dataset.pay)}/paid`, { payout_ref: $("#utr").value.trim() }); closeModal(); toast("Payout recorded"); load(); } catch (e) { toast(e.message, true); } };
+      });
+    }
+    $("#st-d").onchange = load; $("#st-t").onchange = load;
+    $("#st-run") && ($("#st-run").onclick = async () => {
+      const settleDate = $("#st-d").value, business = new Date(new Date(settleDate + "T00:00:00Z").getTime() - 864e5).toISOString().slice(0, 10);
+      if (!await confirmModal({ title: "Compute settlement for " + settleDate + "?", body: `Aggregates successful payments and refunds from business date ${esc(business)}, deducts fees and writes payable lines. Lines already paid are left untouched.`, action: "Compute" })) return;
+      try { const r = await api("POST", "/admin/settlements/run", { date: business }); toast(num(r.settlements.length) + " settlement lines computed"); load(); } catch (e) { toast(e.message, true); }
+    });
+    await load();
+  };
+
+  // ---------- Reconciliation
+  PAGES.recon = async (view, params) => {
+    const date = params.get("date") || daysAgo(1);
+    view.innerHTML = `<div class="toolbar"><label class="row small muted">Business date <input class="input" type="date" id="rc-d" value="${esc(date)}" max="${today()}"></label>
+      <div class="chips" id="rc-f"><button class="chip on" data-x="1">Exceptions</button><button class="chip" data-x="0">All items</button></div>
+      <span class="spacer"></span>${can("ops") ? `<button class="btn primary" id="rc-run">Run reconciliation</button>` : ""}</div><div id="rc-body"></div>`;
+    let exceptionsOnly = true;
+    async function load() {
+      const d = $("#rc-d").value;
+      let r;
+      try { r = await api("GET", `/admin/recon?date=${encodeURIComponent(d)}${exceptionsOnly ? "" : "&all=true"}`); }
+      catch (e) { if (e.status === 404) { $("#rc-body").innerHTML = `<div class="card">${empty("No reconciliation run for " + d, "Run reconciliation to pull the bank MIS and NPCI raw files for this date.")}</div>`; return; } throw e; }
+      const s = typeof r.run.summary === "string" ? JSON.parse(r.run.summary) : r.run.summary || {};
+      const cats = s.categories || {}, total = s.total || 0;
+      const matched = (cats.MATCHED || 0) + (cats.DEEMED_RESOLVED || 0) + (cats.PENDING_RESOLVED || 0);
+      const rate = total ? matched / total : 0;
+      const exc = Object.entries(cats).filter(([k]) => !["MATCHED", "DEEMED_RESOLVED", "PENDING_RESOLVED"].includes(k));
+      $("#rc-body").innerHTML = `<div class="grid g-4">
+          <div class="card kpi"><div class="l">Match rate</div><div class="v" style="color:${rate > 0.999 ? "var(--ok)" : "inherit"}">${pct(rate, 3)}</div><div class="d">${num(matched)} of ${num(total)} ledger entries</div></div>
+          <div class="card kpi"><div class="l">Auto-resolved</div><div class="v">${num((cats.DEEMED_RESOLVED || 0) + (cats.PENDING_RESOLVED || 0))}</div><div class="d">deemed / pending settled from the NPCI file</div></div>
+          <div class="card kpi"><div class="l">Exceptions</div><div class="v" style="color:${s.exceptions ? "var(--bad)" : "var(--ok)"}">${num(s.exceptions || 0)}</div><div class="d">${exc.map(([k, v]) => esc((STATUS[k] || [0, k])[1]) + " " + num(v)).join(" · ") || "nothing to investigate"}</div></div>
+          <div class="card kpi"><div class="l">Run</div><div class="v" style="font-size:18px">${pill(r.run.status)}</div><div class="d mono small" style="word-break:break-all">${esc(r.run.run_id)}<br>${esc(dt(r.run.created_at))} IST</div></div></div>
+        <div class="card"><header><div><h3>${exceptionsOnly ? "Exceptions" : "All reconciled items"}</h3><div class="sub">Switch ledger compared with the sponsor bank MIS and the NPCI raw settlement file</div></div></header>
+          <div class="body flush table-wrap">${r.items && r.items.length ? `<table class="t"><thead><tr><th>Category</th><th>Transaction</th><th>Gateway</th><th>Ledger</th><th>Bank MIS</th><th>NPCI file</th><th class="r">Ledger amount</th><th>Action taken</th></tr></thead><tbody>
+            ${r.items.map((i) => `<tr class="${i.txn_id ? "click" : ""}" data-txn="${esc(i.txn_id)}"><td>${pill(i.category)}</td><td class="mono">${esc(short(i.txn_id, 14))}<div class="sub mono">${esc(i.rrn)}</div></td><td>${esc(tName(i.tenant_id))}</td>
+              <td>${esc(i.ledger_status || "—")}</td><td>${esc(i.bank_status || "—")}</td><td>${esc(i.npci_status || "—")}</td><td class="r">${inr(i.ledger_paise)}${i.bank_paise && i.bank_paise !== i.ledger_paise ? `<div class="sub" style="color:var(--bad)">bank ${inr(i.bank_paise)}</div>` : ""}</td>
+              <td class="small" style="white-space:normal;min-width:220px">${esc(i.action || "—")}</td></tr>`).join("")}</tbody></table>` : empty(exceptionsOnly ? "No exceptions" : "No items", exceptionsOnly ? "Every ledger entry matched the bank and NPCI files." : "")}</div></div>`;
+      bindTxnRows($("#rc-body"));
+    }
+    $("#rc-d").onchange = load;
+    $$("#rc-f .chip").forEach((c) => c.onclick = () => { exceptionsOnly = c.dataset.x === "1"; $$("#rc-f .chip").forEach((x) => x.classList.toggle("on", x === c)); load(); });
+    $("#rc-run") && ($("#rc-run").onclick = async () => {
+      const d = $("#rc-d").value;
+      if (!await confirmModal({ title: "Run reconciliation for " + d + "?", body: "Pulls each sponsor bank's MIS and the NPCI raw file for the date, verifies checksums, matches every ledger entry three ways, resolves deemed payments and raises TCC disputes where money moved without a credit.", action: "Run reconciliation" })) return;
+      const btn = $("#rc-run"); btn.disabled = true; btn.textContent = "Running…";
+      try { const r = await api("POST", "/admin/recon/run", { date: d }); toast(`Reconciled ${num(r.items)} items, ${num(r.exceptions.length)} exceptions`); await load(); } catch (e) { toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = "Run reconciliation"; }
+    });
+    await load();
+  };
+
+  // ---------- Disputes
+  PAGES.disputes = async (view) => {
+    const d = await api("GET", "/admin/disputes");
+    const ds = d.disputes || [];
+    const open = ds.filter((x) => x.status === "RAISED" || x.status === "UNDER_REVIEW");
+    const DT = { TCC: "TCC · credit confirmation", RET: "RET · return request", CHARGEBACK: "Chargeback", COMPLAINT: "Complaint" };
+    // UDIR: TCC and RET are closed within T+5 of the complaint (RBI TAT); other types follow the bank's chargeback cycle.
+    const due = (x) => {
+      if (x.status !== "RAISED" && x.status !== "UNDER_REVIEW") return '<span class="muted">—</span>';
+      const dl = new Date(new Date(x.created_at).getTime() + (x.type === "CHARGEBACK" ? 30 : 5) * 864e5), left = (dl - Date.now()) / 864e5;
+      return `<span class="${left < 0 ? "pill bad" : left < 1 ? "pill warn" : ""}">${left < 0 ? Math.ceil(-left) + "d overdue" : esc(dOnly(dl))}</span>`;
+    };
+    view.innerHTML = `<div class="grid g-4">
+        <div class="card kpi"><div class="l">Open disputes</div><div class="v">${num(open.length)}</div><div class="d">${inrShort(open.reduce((a, x) => a + Math.round(x.amount * 100), 0))} under dispute</div></div>
+        <div class="card kpi"><div class="l">Raised by recon</div><div class="v">${num(ds.filter((x) => /recon$/.test(x.source)).length)}</div><div class="d">automatic TCC for deemed payments</div></div>
+        <div class="card kpi"><div class="l">Resolved</div><div class="v">${num(ds.length - open.length)}</div><div class="d">accepted or rejected</div></div>
+        <div class="card kpi"><div class="l">Chargebacks</div><div class="v">${num(ds.filter((x) => x.type === "CHARGEBACK").length)}</div><div class="d">via remitter banks</div></div></div>
+      <div class="card"><div class="table-wrap">${ds.length ? `<table class="t"><thead><tr><th>Raised</th><th>Dispute</th><th>Type</th><th>Gateway</th><th>Transaction</th><th class="r">Amount</th><th>Status</th><th>Due</th><th>Reason</th></tr></thead><tbody>
+        ${ds.map((x) => `<tr class="click" data-txn="${esc(x.txn_id)}"><td>${esc(dOnly(x.created_at))}<div class="sub">${esc(ago(x.created_at))}</div></td><td class="mono">${esc(short(x.dispute_id, 14))}</td><td>${esc(DT[x.type] || x.type)}</td><td>${esc(tName(x.tenant_id))}</td>
+          <td class="mono">${esc(short(x.txn_id, 14))}</td><td class="r"><b>${esc(inrRupees(x.amount))}</b></td><td>${pill(x.status)}</td><td>${due(x)}</td><td class="small">${esc(x.remarks || x.reason_code)}${x.resolution ? `<div class="sub">${esc(x.resolution)}</div>` : ""}</td></tr>`).join("")}
+        </tbody></table>` : empty("No disputes")}</div></div>`;
+    bindTxnRows(view);
+  };
+
+  // ---------- Merchants
+  const KYC = { PENDING: ["warn", "KYC pending"], VERIFIED: ["ok", "KYC verified"], REJECTED: ["bad", "KYC rejected"] };
+  const kycPill = (m) => m.status === "SUSPENDED" ? pill("SUSPENDED") : `<span class="pill ${KYC[m.kyc_status][0]}">${KYC[m.kyc_status][1]}</span>`;
+  const limitCell = (m) => { const l = m.limits || {}; return l.needs_kyc_for_higher_limit ? `${esc(inrShortR(l.txn_limit))}<div class="sub">${esc(inrShortR(l.category_txn_limit))} after KYC</div>` : esc(inrShortR(l.txn_limit)); };
+  const inrShortR = (r) => inrShort(Math.round(Number(r || 0) * 100));
+  PAGES.merchants = async (view, params) => {
+    const f = { q: params.get("q") || "", kyc: params.get("kyc") || "", tenant: params.get("tenant") || "" };
+    let offset = 0; const limit = 50;
+    view.innerHTML = `<div id="mc-k"></div><div class="toolbar">
+        <div class="search" style="width:260px">${ic("search")}<input class="input" id="mc-q" placeholder="Merchant, legal name or MID" value="${esc(f.q)}"></div>
+        <div class="chips" id="mc-s">${[["", "All"], ["PENDING", "KYC pending"], ["VERIFIED", "Verified"], ["REJECTED", "Rejected"]].map(([k, l]) => `<button class="chip ${k === f.kyc ? "on" : ""}" data-s="${k}">${l}</button>`).join("")}</div>
+        ${tenantSelect("mc-t", f.tenant)}<span class="spacer"></span>
+        ${can("ops") ? `<button class="btn primary" id="mc-new">${ic("plus")}Onboard merchant</button>` : ""}</div>
+      <div class="card"><div class="table-wrap" id="mc-b"></div><div class="pager" id="mc-p"></div></div>`;
+    async function load() {
+      const qs = new URLSearchParams({ limit, offset }); if (f.q) qs.set("q", f.q); if (f.kyc) qs.set("kyc", f.kyc); if (f.tenant) qs.set("tenant", f.tenant);
+      const d = await api("GET", "/admin/merchants?" + qs), c = d.counts || {};
+      const all = Object.values(c).reduce((a, b) => a + b, 0), drift = d.merchants.filter((m) => m.profile_drift).length;
+      $("#mc-k").innerHTML = `<div class="grid g-4">
+        <div class="card kpi"><div class="l">Merchants</div><div class="v">${num(all)}</div><div class="d">registered across ${num(S.tenants.length)} gateways</div></div>
+        <div class="card kpi"><div class="l">KYC verified</div><div class="v" style="color:var(--ok)">${num(c.VERIFIED || 0)}</div><div class="d">eligible for NPCI's higher category limits</div></div>
+        <div class="card kpi"><div class="l">Awaiting KYC</div><div class="v" style="color:${c.PENDING ? "var(--warn)" : "inherit"}">${num(c.PENDING || 0)}</div><div class="d">capped at ₹1 lakh per payment until verified</div></div>
+        <div class="card kpi"><div class="l">Blocked</div><div class="v" style="color:${(c.SUSPENDED || 0) + (c.REJECTED || 0) ? "var(--bad)" : "inherit"}">${num((c.SUSPENDED || 0) + (c.REJECTED || 0))}</div><div class="d">${num(c.SUSPENDED || 0)} suspended · ${num(c.REJECTED || 0)} failed KYC${drift ? ` · <b style="color:var(--warn)">${num(drift)} off profile</b>` : ""}</div></div></div>`;
+      const m = d.merchants;
+      $("#mc-b").innerHTML = m.length ? `<table class="t"><thead><tr><th>Merchant</th><th>Gateway · MID</th><th>Category</th><th>KYC</th><th class="r">Per-payment limit</th><th class="r">Volume (${d.days}d)</th><th class="r">Success</th><th>Profile</th></tr></thead><tbody>
+        ${m.map((x) => `<tr class="click" data-m="${esc(x.tenant_id)}/${esc(x.merchant_id)}"><td style="min-width:250px"><div class="row"><span class="bank-ic" style="background:${hueFor(x.merchant_id)};width:28px;height:28px;font-size:11px">${esc(initials(x.display_name))}</span><div class="stack" style="gap:0;min-width:0"><b class="ellipsis" style="max-width:220px">${esc(x.display_name)}</b><span class="sub ellipsis" style="max-width:220px">${esc(x.legal_name)}</span></div></div></td>
+          <td>${esc(tName(x.tenant_id))}<div class="sub mono">${esc(x.mid)}</div></td><td><div class="stack" style="gap:0"><span>${esc(x.category)}</span><span class="sub">MCC ${esc(x.mcc)}</span></div></td>
+          <td>${kycPill(x)}${x.kyc_method ? `<div class="sub">${esc(x.kyc_method)}</div>` : ""}</td><td class="r">${limitCell(x)}</td>
+          <td class="r"><b>${inrShort(x.volume_paise)}</b><div class="sub">${num(x.count)} payments</div></td><td class="r">${x.count ? pct(x.success_rate, 1) : "—"}</td>
+          <td>${x.profile_drift ? `<span class="pill warn" title="Monthly run rate ${esc(inrShortR(x.monthly_run_rate))} vs declared ${esc(inrShortR(x.declared_monthly_volume))}">Above declared</span>` : x.declared_monthly_volume !== "0.00" ? '<span class="pill neutral">Within profile</span>' : '<span class="faint small">Not declared</span>'}</td></tr>`).join("")}
+        </tbody></table>` : empty("No merchants match", "Merchants appear here when a gateway registers them or sends their first payment.");
+      $("#mc-p").innerHTML = `<span>${d.total ? num(offset + 1) + "–" + num(offset + m.length) + " of " + num(d.total) : "0 results"}</span><span class="row"><button class="btn sm" id="mp-prev" ${offset ? "" : "disabled"}>Previous</button><button class="btn sm" id="mp-next" ${offset + limit < d.total ? "" : "disabled"}>Next</button></span>`;
+      $("#mp-prev").onclick = () => { offset = Math.max(0, offset - limit); load(); };
+      $("#mp-next").onclick = () => { offset += limit; load(); };
+      $$("[data-m]", $("#mc-b")).forEach((r) => r.onclick = () => openMerchant(...r.dataset.m.split("/"), load));
+    }
+    const sync = () => { const p = {}; for (const k in f) if (f[k]) p[k] = f[k]; history.replaceState(null, "", "#/merchants" + (Object.keys(p).length ? "?" + new URLSearchParams(p) : "")); offset = 0; load(); };
+    $$("#mc-s .chip").forEach((c) => c.onclick = () => { f.kyc = c.dataset.s; $$("#mc-s .chip").forEach((x) => x.classList.toggle("on", x === c)); sync(); });
+    let qt; $("#mc-q").oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value.trim(); sync(); }, 300); };
+    $("#mc-t").onchange = (e) => { f.tenant = e.target.value; sync(); };
+    $("#mc-new") && ($("#mc-new").onclick = () => {
+      const b = modal(`<header><h3>Onboard a merchant</h3><p>Registers a gateway's sub-merchant with the due-diligence details RBI's payment aggregator rules ask for. KYC starts as pending until an operator verifies it.</p></header>
+        <form class="content" id="mc-f">
+          <label class="field">Gateway${tenantSelect("mf-t", f.tenant || (S.tenants[0] || {}).tenant_id, "Choose a gateway")}</label>
+          <div class="grid g-2" style="margin:0;gap:12px"><label class="field">Merchant ID<input class="input" name="merchant_id" required pattern="[A-Za-z0-9._\\-]{1,64}" placeholder="freshbasket"></label>
+          <label class="field">MCC<input class="input" name="mcc" required pattern="\\d{4}" placeholder="5411"></label></div>
+          <label class="field">Legal name<input class="input" name="legal_name" required placeholder="FreshBasket Retail Pvt Ltd"><span class="hint">The name on the settlement bank account. Payers see it once KYC is verified.</span></label>
+          <label class="field">Display name<input class="input" name="display_name" placeholder="FreshBasket Grocery"></label>
+          <div class="grid g-2" style="margin:0;gap:12px"><label class="field">PAN<input class="input" name="pan" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]" placeholder="ABCPE1234F"></label>
+          <label class="field">CKYC number<input class="input" name="ckyc_number" pattern="[0-9]{14}" placeholder="14 digits"></label></div>
+          <div class="grid g-2" style="margin:0;gap:12px"><label class="field">Business type<select class="input" name="business_type"><option value="SMALL">Small (turnover up to ₹40 lakh)</option><option value="REGULAR">Regular</option></select></label>
+          <label class="field">Declared monthly volume (₹)<input class="input" name="declared_monthly_volume" placeholder="500000.00"></label></div>
+          <div class="login-err" hidden id="mf-err"></div>
+        </form><footer><button class="btn" data-no>Cancel</button><button class="btn primary" data-yes>Register merchant</button></footer>`);
+      $("[data-no]", b).onclick = closeModal;
+      $("[data-yes]", b).onclick = async () => {
+        const form = $("#mc-f"); if (!form.reportValidity()) return;
+        const v = Object.fromEntries(new FormData(form)); v.tenant_id = $("#mf-t").value; v.pan = (v.pan || "").toUpperCase();
+        for (const k of Object.keys(v)) if (v[k] === "") delete v[k];
+        try { const m = await api("POST", "/admin/merchants", v); closeModal(); toast(m.display_name + " registered · MID " + m.mid); load(); openMerchant(m.tenant_id, m.merchant_id, load); }
+        catch (e) { $("#mf-err").textContent = e.message; $("#mf-err").hidden = false; }
+      };
+    });
+    await load();
+  };
+  async function openMerchant(tenant, id, after) {
+    openDrawer(`<header><div class="skeleton" style="height:60px;flex:1"></div></header>`);
+    let d;
+    try { d = await api("GET", `/admin/merchants/${encodeURIComponent(tenant)}/${encodeURIComponent(id)}`); } catch (e) { openDrawer(`<header><h3>Merchant</h3></header><div class="content">${empty(e.message)}</div>`); return; }
+    const m = d.merchant, l = m.limits || {};
+    const act = can("ops") ? [
+      m.kyc_status !== "VERIFIED" ? `<button class="btn primary" data-act="verify">Verify KYC</button>` : "",
+      m.kyc_status === "PENDING" ? `<button class="btn" data-act="reject">Reject KYC</button>` : "",
+      m.status === "SUSPENDED" ? `<button class="btn" data-act="reactivate">Reactivate</button>` : `<button class="btn danger" data-act="suspend">Suspend</button>`].join("") : "";
+    openDrawer(`<header><div style="flex:1;min-width:0"><div class="row" style="gap:10px">${kycPill(m)}<span class="small muted">${esc(tName(m.tenant_id))} · MID <span class="mono">${esc(m.mid)}</span></span></div>
+        <div class="amount-hero" style="margin-top:8px;font-size:24px">${esc(m.display_name)}</div><div class="small muted">${esc(m.legal_name)}</div></div>
+        <button class="btn ghost icon-btn" data-close aria-label="Close">${ic("x")}</button></header>
+      <div class="content">
+        ${m.kyc_status === "PENDING" ? `<div class="note warn">${ic("warn")}<div><b>KYC pending.</b> Payments are capped at NPCI's general limit of ₹1 lakh${l.needs_kyc_for_higher_limit ? ` until KYC unlocks the ${esc(l.category)} limit of ${esc(inrShortR(l.category_txn_limit))}` : ""}. Payers see the display name until the legal name is verified.</div></div>` : ""}
+        ${m.status === "SUSPENDED" ? `<div class="note bad">${ic("warn")}<div><b>Suspended.</b> New payments to this merchant are refused. ${esc(m.remarks || "")}</div></div>` : ""}
+        ${m.profile_drift ? `<div class="note warn">${ic("warn")}<div><b>Trading above declared profile.</b> Monthly run rate ${esc(inrShortR(m.monthly_run_rate))} against ${esc(inrShortR(m.declared_monthly_volume))} declared at onboarding. RBI expects payment aggregators to review merchants whose activity departs from their profile.</div></div>` : ""}
+        <div class="grid g-3" style="margin:0;gap:10px">
+          <div class="card kpi" style="padding:12px"><div class="l">Volume, 30 days</div><div class="v" style="font-size:20px">${inrShort(m.volume_paise || 0)}</div><div class="d">${num(m.count || 0)} payments</div></div>
+          <div class="card kpi" style="padding:12px"><div class="l">Success rate</div><div class="v" style="font-size:20px">${m.count ? pct(m.success_rate, 1) : "—"}</div><div class="d">all attempts</div></div>
+          <div class="card kpi" style="padding:12px"><div class="l">Per-payment limit</div><div class="v" style="font-size:20px">${esc(inrShortR(l.txn_limit))}</div><div class="d">daily ${esc(inrShortR(l.daily_limit))} per customer</div></div></div>
+        <div><h5>Due diligence</h5><dl class="kv">
+          <dt>KYC route</dt><dd>${esc(m.kyc_method || "—")}${m.kyc_ref ? ` · <span class="mono">${esc(m.kyc_ref)}</span>` : ""}</dd>
+          <dt>PAN</dt><dd class="mono">${esc(m.pan || "—")}</dd><dt>GSTIN</dt><dd class="mono">${esc(m.gstin || "—")}</dd>
+          <dt>Business type</dt><dd>${m.business_type === "SMALL" ? "Small merchant (turnover up to ₹40 lakh)" : "Regular"}</dd>
+          <dt>Verified</dt><dd>${m.verified_at ? esc(dt(m.verified_at)) + " IST" : "—"}</dd>
+          <dt>Registered</dt><dd>${esc(dt(m.created_at))} · ${m.source === "FIRST_PAYMENT" ? "from its first payment" : m.source === "API" ? "by the gateway" : esc(m.source)}</dd>
+          <dt>Declared volume</dt><dd>${m.declared_monthly_volume !== "0.00" ? esc(inrShortR(m.declared_monthly_volume)) + " a month" : "—"}</dd>
+          ${m.remarks ? `<dt>Remarks</dt><dd>${esc(m.remarks)}</dd>` : ""}</dl></div>
+        <div><h5>NPCI limits</h5><dl class="kv"><dt>Category</dt><dd>${esc(l.category)} · MCC ${esc(m.mcc)}</dd><dt>Per payment</dt><dd>${esc(inrShortR(l.txn_limit))}${l.needs_kyc_for_higher_limit ? ` <span class="small muted">(${esc(inrShortR(l.category_txn_limit))} once verified)</span>` : ""}</dd><dt>Per customer per day</dt><dd>${esc(inrShortR(l.daily_limit))}</dd><dt>Source</dt><dd class="small">${esc(l.source)}</dd></dl></div>
+        <div><h5>Latest payments</h5>${d.transactions.length ? `<div class="table-wrap">${txnTable(d.transactions, { compact: true })}</div>` : empty("No payments yet")}</div>
+        ${act ? `<div class="row" style="flex-wrap:wrap">${act}</div>` : ""}
+      </div>`);
+    $("#drawer [data-close]").onclick = closeDrawer;
+    bindTxnRows($("#drawer"));
+    $$("#drawer [data-act]").forEach((b) => b.onclick = async () => {
+      const a = b.dataset.act, body = { action: a };
+      if (a === "verify") {
+        const box = modal(`<header><h3>Verify KYC for ${esc(m.display_name)}</h3><p>Record how the merchant's identity was verified. This unlocks NPCI's ${esc(l.category)} limits and shows payers the legal name.</p></header>
+          <div class="content"><label class="field">Verification route<select class="input" id="kv-m">${[["CKYC", "CKYC registry record"], ["PAN", "PAN with contact-point verification"], ["FORM60", "Form 60 (small merchant)"], ["OVD", "Officially valid document"]].map(([k, v]) => `<option value="${k}" ${k === m.kyc_method ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+          <label class="field">Reference<input class="input" id="kv-r" ${m.kyc_ref ? "" : "required"} placeholder="${m.kyc_ref ? "On file: " + esc(m.kyc_ref) : "CKYC number or document reference"}"><span class="hint">Only the last four characters are kept.</span></label></div>
+          <footer><button class="btn" data-no>Cancel</button><button class="btn primary" data-yes>Mark verified</button></footer>`);
+        $("[data-no]", box).onclick = closeModal;
+        $("[data-yes]", box).onclick = async () => { if (!$("#kv-r").reportValidity()) return; body.method = $("#kv-m").value; body.ref = $("#kv-r").value.trim(); closeModal(); await decide(body); };
+        return;
+      }
+      const label = { reject: "Reject KYC", suspend: "Suspend merchant", reactivate: "Reactivate merchant" }[a];
+      const box = modal(`<header><h3>${label}?</h3><p>${a === "suspend" ? "New payments to this merchant will be refused. Payments in flight still complete and settle." : a === "reject" ? "Payments to this merchant will be refused until KYC is redone." : "The merchant can take payments again."}</p></header>
+        <div class="content"><label class="field">Reason${a === "reactivate" ? " (optional)" : ""}<input class="input" id="kd-r" ${a === "reactivate" ? "" : "required"} placeholder="${a === "suspend" ? "Chargeback ratio above threshold" : "Reason recorded in the audit log"}"></label></div>
+        <footer><button class="btn" data-no>Cancel</button><button class="btn primary ${a === "reactivate" ? "" : "danger"}" data-yes>${label}</button></footer>`);
+      $("[data-no]", box).onclick = closeModal;
+      $("[data-yes]", box).onclick = async () => { const r = $("#kd-r"); if (!r.reportValidity()) return; body.remarks = r.value.trim(); closeModal(); await decide(body); };
+    });
+    async function decide(body) {
+      try { await api("POST", `/admin/merchants/${encodeURIComponent(tenant)}/${encodeURIComponent(id)}/decision`, body); toast({ verify: "KYC verified", reject: "KYC rejected", suspend: "Merchant suspended", reactivate: "Merchant reactivated" }[body.action]); openMerchant(tenant, id, after); after && after(); }
+      catch (e) { toast(e.message, true); }
+    }
+  }
+
+  // ---------- Refunds
+  PAGES.refunds = async (view, params) => {
+    const f = { q: params.get("q") || "", status: params.get("status") || "", tenant: params.get("tenant") || "" };
+    let offset = 0; const limit = 50;
+    view.innerHTML = `<div id="rf-k"></div><div class="toolbar">
+        <div class="search" style="width:260px">${ic("search")}<input class="input" id="rf-q" placeholder="Refund ID, payment ID or RRN" value="${esc(f.q)}"></div>
+        <div class="chips" id="rf-s">${[["", "All"], ["SUCCESS", "Refunded"], ["PENDING", "In progress"], ["OFFLINE_QUEUED", "Offline queued"], ["FAILED", "Failed"]].map(([k, l]) => `<button class="chip ${k === f.status ? "on" : ""}" data-s="${k}">${l}</button>`).join("")}</div>
+        ${tenantSelect("rf-t", f.tenant)}<span class="spacer"></span>${can("ops") ? `<a class="btn" href="/admin/refunds/offline">${ic("download")}Offline refund file</a>` : ""}</div>
+      <div class="card"><div class="table-wrap" id="rf-b"></div><div class="pager" id="rf-p"></div></div>`;
+    async function load() {
+      const qs = new URLSearchParams({ limit, offset }); for (const k of ["q", "status", "tenant"]) if (f[k]) qs.set(k, f[k]);
+      const d = await api("GET", "/admin/refunds?" + qs), s = d.summary || {};
+      const g = (k) => s[k] || { count: 0, amount: "0" };
+      const inflight = ["INITIATED", "PENDING", "DEEMED", "OFFLINE_QUEUED"].reduce((a, k) => a + g(k).count, 0);
+      $("#rf-k").innerHTML = `<div class="grid g-4">
+        <div class="card kpi"><div class="l">Refunded, 30 days</div><div class="v">${esc(inrShortR(g("SUCCESS").amount))}</div><div class="d">${num(g("SUCCESS").count)} refunds back to payers' original accounts</div></div>
+        <div class="card kpi"><div class="l">In progress</div><div class="v" style="color:${inflight ? "var(--warn)" : "inherit"}">${num(inflight)}</div><div class="d">${num(g("OFFLINE_QUEUED").count)} waiting for the bank's offline refund file</div></div>
+        <div class="card kpi"><div class="l">Failed</div><div class="v" style="color:${g("FAILED").count ? "var(--bad)" : "inherit"}">${num(g("FAILED").count)}</div><div class="d">${esc(inrShortR(g("FAILED").amount))} to retry or refund offline</div></div>
+        <div class="card kpi"><div class="l">Rules applied</div><div class="v" style="font-size:16px;line-height:1.35;margin-top:6px">Original source only</div><div class="d">never more than the payment · RBI PA Directions para 10(f)</div></div></div>`;
+      const r = d.refunds, now = Date.now();
+      $("#rf-b").innerHTML = r.length ? `<table class="t"><thead><tr><th>Created</th><th>Refund</th><th>Merchant · gateway</th><th>Payer</th><th>Original payment</th><th class="r">Refund</th><th>Mode</th><th>Status</th><th class="r">Age</th></tr></thead><tbody>
+        ${r.map((x) => { const open = !["SUCCESS", "FAILED"].includes(x.status), h = x.age_hours;
+          return `<tr class="click" data-txn="${esc(x.txn_id)}"><td><div class="stack" style="gap:0"><span>${esc(ago(x.created_at))}</span><span class="sub">${esc(dt(x.created_at))}</span></div></td>
+          <td><div class="stack" style="gap:0"><span class="mono">${esc(short(x.refund_id, 14))}</span><span class="sub mono">${esc(x.merchant_refund_ref)}</span></div></td>
+          <td><div class="ellipsis" style="width:180px">${esc(x.payee_name || x.merchant_id)}</div><div class="sub">${esc(tName(x.tenant_id))}</div></td><td class="mono">${esc(x.payer_vpa || "—")}</td>
+          <td><div class="stack" style="gap:0"><span class="mono">${esc(short(x.txn_id, 14))}</span><span class="sub">${esc(inrRupees(x.txn_amount))} · ${esc(dOnly(x.txn_created_at))}</span></div></td>
+          <td class="r"><b>${esc(inrRupees(x.amount))}</b></td><td>${esc(x.mode === "ONLINE" ? "Online" : x.mode === "BULK" ? "Bulk" : "Offline file")}</td><td>${pill(x.status)}</td>
+          <td class="r ${open && h > 48 ? "" : "muted"}" style="${open && h > 48 ? "color:var(--bad);font-weight:600" : ""}">${h < 1 ? Math.round(h * 60) + " min" : h < 48 ? Math.round(h) + " h" : Math.round(h / 24) + " d"}</td></tr>`; }).join("")}
+        </tbody></table>` : empty("No refunds match", "Refunds raised by gateways through the API or by operators from a payment appear here.");
+      $("#rf-p").innerHTML = `<span>${d.total ? num(offset + 1) + "–" + num(offset + r.length) + " of " + num(d.total) : "0 results"}</span><span class="row"><button class="btn sm" id="rp-prev" ${offset ? "" : "disabled"}>Previous</button><button class="btn sm" id="rp-next" ${offset + limit < d.total ? "" : "disabled"}>Next</button></span>`;
+      $("#rp-prev").onclick = () => { offset = Math.max(0, offset - limit); load(); };
+      $("#rp-next").onclick = () => { offset += limit; load(); };
+      bindTxnRows($("#rf-b"));
+    }
+    const sync = () => { const p = {}; for (const k in f) if (f[k]) p[k] = f[k]; history.replaceState(null, "", "#/refunds" + (Object.keys(p).length ? "?" + new URLSearchParams(p) : "")); offset = 0; load(); };
+    $$("#rf-s .chip").forEach((c) => c.onclick = () => { f.status = c.dataset.s; $$("#rf-s .chip").forEach((x) => x.classList.toggle("on", x === c)); sync(); });
+    let qt; $("#rf-q").oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value.trim(); sync(); }, 300); };
+    $("#rf-t").onchange = (e) => { f.tenant = e.target.value; sync(); };
+    await load();
+  };
+
+  // ---------- AutoPay mandates
+  const FREQ = { ONETIME: "One time", DAILY: "Daily", WEEKLY: "Weekly", FORTNIGHTLY: "Fortnightly", MONTHLY: "Monthly", BIMONTHLY: "Every 2 months", QUARTERLY: "Quarterly", HALFYEARLY: "Half-yearly", YEARLY: "Yearly", ASPRESENTED: "As presented" };
+  PAGES.mandates = async (view, params) => {
+    const f = { q: params.get("q") || "", status: params.get("status") || "", tenant: params.get("tenant") || "" };
+    let offset = 0; const limit = 50;
+    view.innerHTML = `<div id="md-k"></div><div class="toolbar">
+        <div class="search" style="width:260px">${ic("search")}<input class="input" id="md-q" placeholder="Mandate ID, UMN or merchant" value="${esc(f.q)}"></div>
+        <div class="chips" id="md-s">${[["", "All"], ["ACTIVE", "Active"], ["PENDING", "Awaiting approval"], ["REVOKED", "Revoked"], ["FAILED", "Failed"]].map(([k, l]) => `<button class="chip ${k === f.status ? "on" : ""}" data-s="${k}">${l}</button>`).join("")}</div>
+        ${tenantSelect("md-t", f.tenant)}</div>
+      <div class="card"><div class="table-wrap" id="md-b"></div><div class="pager" id="md-p"></div></div>`;
+    async function load() {
+      const qs = new URLSearchParams({ limit, offset }); for (const k of ["q", "status", "tenant"]) if (f[k]) qs.set(k, f[k]);
+      const d = await api("GET", "/admin/mandates?" + qs), c = d.counts || {};
+      $("#md-k").innerHTML = `<div class="grid g-4">
+        <div class="card kpi"><div class="l">Active mandates</div><div class="v">${num(c.ACTIVE || 0)}</div><div class="d">${num(c.PENDING || 0)} awaiting the payer's approval</div></div>
+        <div class="card kpi"><div class="l">Revoked or failed</div><div class="v">${num((c.REVOKED || 0) + (c.FAILED || 0))}</div><div class="d">${num(c.REVOKED || 0)} revoked · ${num(c.FAILED || 0)} not approved</div></div>
+        <div class="card kpi" style="grid-column:span 2"><div class="l">AutoPay rules enforced</div><div class="small" style="margin-top:8px;line-height:1.7">
+          <span class="pill info">Pre-debit notice ≥ 24 h</span> <span class="pill info">No debits 10:00–13:00, 17:00–21:30</span> <span class="pill info">1 attempt + 3 retries</span> <span class="pill info">Debits above ₹15,000 refused (₹1 lakh insurance, MF)</span></div>
+          <div class="d">RBI e-mandate framework and NPCI UPI-OC-215-A</div></div></div>`;
+      const m = d.mandates;
+      $("#md-b").innerHTML = m.length ? `<table class="t"><thead><tr><th>Created</th><th>Mandate</th><th>Merchant · gateway</th><th>Payer</th><th class="r">Max amount</th><th>Frequency</th><th class="r">Debits</th><th>Next debit</th><th>Status</th></tr></thead><tbody>
+        ${m.map((x) => `<tr class="click" data-md="${esc(x.mandate_id)}"><td>${esc(dOnly(x.created_at))}</td><td><div class="stack" style="gap:0"><span class="mono">${esc(short(x.mandate_id, 14))}</span><span class="sub mono">${esc(x.umn ? short(x.umn, 18) : x.merchant_ref)}</span></div></td>
+          <td>${esc(x.merchant_id)}<div class="sub">${esc(tName(x.tenant_id))}</div></td><td class="mono">${esc(x.payer_vpa)}</td><td class="r"><b>${esc(inrRupees(x.max_amount))}</b></td><td>${esc(FREQ[x.frequency] || x.frequency)}<div class="sub">until ${esc(dOnly(x.end_date + "T12:00:00Z"))}</div></td><td class="r">${num(x.debits)}<div class="sub">${esc(inrShortR(x.debited))}</div></td><td>${x.next_debit_date ? `<span class="pill info">${esc(dOnly(x.next_debit_date + "T12:00:00Z"))}</span>` : '<span class="faint">—</span>'}</td><td>${pill(x.status)}</td></tr>`).join("")}
+        </tbody></table>` : empty("No mandates match", "UPI AutoPay mandates created by gateways appear here.");
+      $("#md-p").innerHTML = `<span>${d.total ? num(offset + 1) + "–" + num(offset + m.length) + " of " + num(d.total) : "0 results"}</span><span class="row"><button class="btn sm" id="dp-prev" ${offset ? "" : "disabled"}>Previous</button><button class="btn sm" id="dp-next" ${offset + limit < d.total ? "" : "disabled"}>Next</button></span>`;
+      $("#dp-prev").onclick = () => { offset = Math.max(0, offset - limit); load(); };
+      $("#dp-next").onclick = () => { offset += limit; load(); };
+      $$("[data-md]", $("#md-b")).forEach((r) => r.onclick = () => openMandate(r.dataset.md, load));
+    }
+    const sync = () => { const p = {}; for (const k in f) if (f[k]) p[k] = f[k]; history.replaceState(null, "", "#/mandates" + (Object.keys(p).length ? "?" + new URLSearchParams(p) : "")); offset = 0; load(); };
+    $$("#md-s .chip").forEach((c) => c.onclick = () => { f.status = c.dataset.s; $$("#md-s .chip").forEach((x) => x.classList.toggle("on", x === c)); sync(); });
+    let qt; $("#md-q").oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value.trim(); sync(); }, 300); };
+    $("#md-t").onchange = (e) => { f.tenant = e.target.value; sync(); };
+    await load();
+  };
+  async function openMandate(id, after) {
+    openDrawer(`<header><div class="skeleton" style="height:60px;flex:1"></div></header>`);
+    let d;
+    try { d = await api("GET", "/admin/mandates/" + encodeURIComponent(id)); } catch (e) { openDrawer(`<header><h3>Mandate</h3></header><div class="content">${empty(e.message)}</div>`); return; }
+    const m = d.mandate;
+    openDrawer(`<header><div style="flex:1;min-width:0"><div class="row" style="gap:10px">${pill(m.status)}<span class="small muted">UPI AutoPay · ${esc(FREQ[m.frequency] || m.frequency)} · ${esc(tName(m.tenant_id))}</span></div>
+        <div class="amount-hero" style="margin-top:8px">up to ${esc(inrRupees(m.max_amount))}</div><div class="small muted mono">${esc(m.mandate_id)} ${copyBtn(m.mandate_id)}</div></div>
+        <button class="btn ghost icon-btn" data-close aria-label="Close">${ic("x")}</button></header>
+      <div class="content">
+        <div><h5>Details</h5><dl class="kv">
+          <dt>UMN</dt><dd class="mono">${m.umn ? esc(m.umn) + copyBtn(m.umn) : "—"}</dd><dt>Payer</dt><dd class="mono">${esc(m.payer_vpa)}</dd>
+          <dt>Merchant</dt><dd>${esc(m.merchant_id)} · MCC ${esc(m.mcc)}</dd><dt>Payee VPA</dt><dd class="mono">${esc(m.payee_vpa)}</dd>
+          <dt>Validity</dt><dd>${esc(dOnly(m.start_date + "T12:00:00Z"))} to ${esc(dOnly(m.end_date + "T12:00:00Z"))}</dd>
+          <dt>Without PIN up to</dt><dd>${esc(inrRupees(m.afa_cap))} per debit <span class="small muted">(RBI additional-authentication limit)</span></dd>
+          <dt>Collected</dt><dd>${esc(inrRupees(m.debited))} in ${num(m.debits)} debits</dd><dt>Sponsor bank</dt><dd>${esc(pName(m.psp))}</dd></dl></div>
+        <div><h5>Pre-debit notifications</h5>${d.notifications.length ? `<table class="t"><thead><tr><th>#</th><th>Notified</th><th>Debit date</th><th class="r">Amount</th><th class="r">Tries</th><th>Status</th></tr></thead><tbody>
+          ${d.notifications.map((n) => `<tr><td>${num(n.seq)}</td><td>${esc(dt(n.notified_at))}</td><td>${esc(dOnly(n.debit_date + "T12:00:00Z"))}</td><td class="r">${esc(inrRupees(n.amount))}</td><td class="r">${num(n.attempts)} / 4</td><td>${pill(n.status)}</td></tr>`).join("")}</tbody></table>` : empty("No notifications yet", "The gateway must notify the payer at least 24 hours before each debit.")}</div>
+        <div><h5>Debits</h5>${d.debits.length ? `<div class="table-wrap">${txnTable(d.debits, { compact: true })}</div>` : empty("No debits yet")}</div>
+        <div><h5>History</h5><ol class="timeline">${(d.events || []).map((e) => `<li><span class="node ${{ ACTIVE: "ok", REVOKED: "bad", FAILED: "bad", PENDING: "warn" }[e.to] || "info"}"></span><div><b>${esc(e.from === e.to ? (e.detail || "Updated") : ({ PENDING: "Sent to the payer for approval", ACTIVE: "Approved by the payer", REVOKED: "Revoked", FAILED: "Not approved" }[e.to] || e.to))}</b><div class="small muted">${esc(e.source)}${e.from !== e.to && e.detail ? " · " + esc(e.detail) : ""}</div></div><small class="num">${esc(dt(e.at))}</small></li>`).join("")}</ol></div>
+        ${can("ops") && (m.status === "ACTIVE" || m.status === "PENDING") ? `<div class="row"><button class="btn danger" data-revoke>Revoke mandate</button></div>` : ""}
+      </div>`);
+    $("#drawer [data-close]").onclick = closeDrawer;
+    bindTxnRows($("#drawer"));
+    const rv = $("#drawer [data-revoke]");
+    if (rv) rv.onclick = async () => {
+      if (!await confirmModal({ title: "Revoke this mandate?", body: "The sponsor bank is told to cancel it and the gateway gets a mandate.revoked webhook. No further debits can run.", action: "Revoke mandate", danger: true })) return;
+      try { await api("POST", `/admin/mandates/${encodeURIComponent(id)}/revoke`); toast("Mandate revoked"); openMandate(id, after); after && after(); } catch (e) { toast(e.message, true); }
+    };
+  }
+
+  // ---------- RBI turnaround (TAT)
+  const TAT = { WITHIN_TAT: ["info", "Within TAT"], DUE_SOON: ["warn", "Due within 24 h"], BREACHED: ["bad", "TAT breached"], RESOLVED_IN_TAT: ["ok", "Resolved in TAT"], RESOLVED_LATE: ["warn", "Resolved late"] };
+  PAGES.tat = async (view, params) => {
+    let show = params.get("show") || "open";
+    view.innerHTML = `<div id="ta-k"></div><div class="toolbar"><div class="chips" id="ta-s">${[["open", "Open"], ["late", "Breached or late"], ["all", "All cases"]].map(([k, l]) => `<button class="chip ${k === show ? "on" : ""}" data-s="${k}">${l}</button>`).join("")}</div>
+      <span class="spacer"></span><span class="small muted" id="ta-src"></span></div><div class="card"><div class="table-wrap" id="ta-b"></div></div>`;
+    let d;
+    function render() {
+      const c = d.counts || {}, open = (c.WITHIN_TAT || 0) + (c.DUE_SOON || 0) + (c.BREACHED || 0);
+      $("#ta-k").innerHTML = `<div class="note info" style="margin-bottom:16px">${ic("info")}<div>When a customer is debited but the merchant isn't confirmed (a <b>deemed</b> payment), RBI requires the money back by <b>T+${d.rule.tat_days}</b>, where T is the payment date. After that the customer is owed <b>${esc(inrRupees(d.rule.compensation_per_day))} for every day of delay</b>. Reconciliation against the NPCI settlement file closes most cases the next day.</div></div>
+        <div class="grid g-4">
+        <div class="card kpi"><div class="l">Open cases</div><div class="v">${num(open)}</div><div class="d">${num(c.DUE_SOON || 0)} due within 24 hours</div></div>
+        <div class="card kpi"><div class="l">TAT breached</div><div class="v" style="color:${c.BREACHED ? "var(--bad)" : "var(--ok)"}">${num(c.BREACHED || 0)}</div><div class="d">${c.BREACHED ? "compensation accruing daily" : "no customer owed compensation"}</div></div>
+        <div class="card kpi"><div class="l">Compensation owed</div><div class="v" style="color:${d.compensation !== "0.00" ? "var(--bad)" : "inherit"}">${esc(inrRupees(d.compensation))}</div><div class="d">last ${num(d.days)} days, including resolved-late cases</div></div>
+        <div class="card kpi"><div class="l">Resolved within TAT</div><div class="v">${pct(d.resolved_in_tat_rate, 1)}</div><div class="d">${num(c.RESOLVED_IN_TAT || 0)} in time · ${num(c.RESOLVED_LATE || 0)} late</div></div></div>`;
+      $("#ta-src").textContent = d.rule.source;
+      const rows = d.cases.filter((x) => show === "all" || (show === "open" ? ["WITHIN_TAT", "DUE_SOON", "BREACHED"].includes(x.state) : ["BREACHED", "RESOLVED_LATE"].includes(x.state)));
+      const left = (x) => { const h = (new Date(x.deadline) - Date.now()) / 36e5; return h > 48 ? Math.floor(h / 24) + " days left" : h > 0 ? Math.max(1, Math.round(h)) + " h left" : ""; };
+      $("#ta-b").innerHTML = rows.length ? `<table class="t"><thead><tr><th>Payment</th><th>Transaction</th><th>Gateway · bank</th><th>Merchant · payer</th><th class="r">Amount</th><th>Reverse by</th><th>State</th><th class="r">Compensation</th><th>Outcome</th></tr></thead><tbody>
+        ${rows.map((x) => `<tr class="click" data-txn="${esc(x.txn_id)}"><td>${esc(dt(x.created_at))}</td><td class="mono">${esc(short(x.txn_id, 14))}${x.dispute_id ? `<div class="sub">TCC ${esc(short(x.dispute_id, 12))}</div>` : ""}</td><td>${esc(tName(x.tenant_id))}<div class="sub">${esc(pName(x.psp))}</div></td>
+          <td><div class="ellipsis" style="width:180px">${esc(x.payee_name || x.merchant_id)}</div><div class="sub mono">${esc(x.payer_vpa || "—")}</div></td><td class="r"><b>${esc(inrRupees(x.amount))}</b></td>
+          <td>${esc(dOnly(new Date(new Date(x.deadline) - 1000)))}<div class="sub">${esc(left(x))}</div></td>
+          <td><span class="pill ${TAT[x.state][0]}">${TAT[x.state][1]}</span>${x.days_late ? `<div class="sub" style="color:var(--bad)">${num(x.days_late)} day${x.days_late > 1 ? "s" : ""} late</div>` : ""}</td>
+          <td class="r" style="${x.compensation !== "0.00" ? "color:var(--bad);font-weight:600" : ""}">${x.compensation !== "0.00" ? esc(inrRupees(x.compensation)) : '<span class="faint">—</span>'}</td>
+          <td>${x.resolved_at ? `${pill(x.status)}<div class="sub">${esc(dt(x.resolved_at))}</div>` : '<span class="faint small">awaiting settlement file</span>'}</td></tr>`).join("")}
+        </tbody></table>` : empty(show === "open" ? "No open cases" : "Nothing here", show === "open" ? "Every deemed payment has been confirmed or reversed." : "");
+      bindTxnRows($("#ta-b"));
+    }
+    d = await api("GET", "/admin/compliance/tat?days=30");
+    render();
+    $$("#ta-s .chip").forEach((c) => c.onclick = () => { show = c.dataset.s; $$("#ta-s .chip").forEach((x) => x.classList.toggle("on", x === c)); history.replaceState(null, "", "#/tat?show=" + show); render(); });
+  };
+
+  // ---------- NPCI & RBI rules
+  PAGES.rules = async (view) => {
+    const r = await api("GET", "/admin/compliance/rules");
+    const rule = (title, body, source, extra = "") => `<div class="card rule"><header><div><h3>${title}</h3><div class="sub">${esc(source)}</div></div><span class="spacer"></span><span class="pill ok">Enforced</span></header><div class="body">${body}${extra}</div></div>`;
+    const sc = r.status_checks, ap = r.autopay;
+    view.innerHTML = `<div class="note info" style="margin-bottom:16px">${ic("info")}<div>These are the NPCI and RBI rules the switch applies to every payment, with the circular each comes from. They are set in the switch's configuration, not from this console.</div></div>
+      <div class="grid g-2">
+      ${rule("Status checks (ReqChkTxn)", `<dl class="kv"><dt>First check</dt><dd>${num(sc.first_after_seconds)} seconds after the payment</dd><dt>Maximum checks</dt><dd>${num(sc.max_checks)} per payment</dd><dt>Window</dt><dd>all within ${num(sc.window_minutes / 60)} hours</dd><dt>After that</dt><dd>marked deemed; the NPCI settlement file decides</dd><dt>Unpaid intents</dt><dd>not polled before they expire</dd></dl>`, sc.source)}
+      ${rule("Response deadlines", `<dl class="kv"><dt>Payment (ReqPay)</dt><dd>${num(r.timeouts.ReqPay)} seconds</dd><dt>Status check (ReqChkTxn)</dt><dd>${num(r.timeouts.ReqChkTxn)} seconds</dd><dt>Address validation (ReqValAdd)</dt><dd>${num(r.timeouts.ReqValAdd)} seconds</dd><dt>On timeout</dt><dd>counted as a technical failure; the router fails over</dd></dl>`, r.timeouts.source)}
+      ${rule("AutoPay mandates", `<dl class="kv"><dt>Pre-debit notification</dt><dd>at least ${num(ap.pre_debit_notice_hours)} hours before each debit, for at most the notified amount</dd><dt>Without the payer's PIN</dt><dd>up to ${esc(inrRupees(ap.afa_cap))}; ${esc(inrRupees(ap.afa_cap_insurance_mf))} for insurance and mutual funds. Larger debits are refused</dd><dt>Debit date</dt><dd>not before the date in the notice</dd><dt>Peak hours</dt><dd>no debits ${esc(ap.peak_hours.join(" and "))}${ap.peak_hours_enforced ? "" : ' <span class="pill warn">off in this environment</span>'}</dd><dt>Retries</dt><dd>1 attempt and 3 retries per notification</dd></dl>`, ap.source)}
+      ${rule("Failed-transaction turnaround", `<dl class="kv"><dt>Deadline</dt><dd>reverse by T+${num(r.tat.days)} when the customer was debited but the merchant not credited</dd><dt>Compensation</dt><dd>${esc(inrRupees(r.tat.compensation_per_day))} per day of delay, tracked per case</dd></dl><a class="small" href="#/tat">Open the turnaround tracker ${ic("arrow", 'style="width:14px;height:14px;display:inline;vertical-align:-2px"')}</a>`, r.tat.source)}
+      ${rule("Collect requests", `<dl class="kv"><dt>Person-to-person collect</dt><dd>refused (MCC 0000)</dd><dt>Merchant collect and AutoPay</dt><dd>only for merchants registered with the switch beforehand</dd></dl>`, r.collect.source)}
+      ${rule("Payee name", `<dl class="kv"><dt>Shown to payers</dt><dd>the legal name once KYC is verified; before that, the name the merchant was registered with</dd><dt>Before KYC</dt><dd>gateways that require KYC refuse payments; others are capped at the general limit</dd><dt>MCC</dt><dd>fixed at onboarding; a payment with another MCC is refused</dd></dl>`, r.payee_name.source)}
+      </div>
+      <div class="card"><header><div><h3>Per-transaction limits by merchant category</h3><div class="sub">Higher limits apply only to merchants whose KYC is verified; everyone else is held to the general limit. Daily totals are checked for collect and AutoPay, where the payer is known up front; for intent and QR the payer's bank applies them</div></div><span class="spacer"></span><span class="pill ok">Enforced</span></header>
+        <div class="body flush table-wrap"><table class="t"><thead><tr><th>Category</th><th>MCCs</th><th class="r">Per payment</th><th class="r">Per customer per day</th><th>Source</th></tr></thead><tbody>
+        ${r.categories.map((c) => `<tr><td><b>${esc(c.name)}</b></td><td class="mono small" style="white-space:normal;max-width:320px">${esc((c.mccs || []).join(", ") || "all others")}</td><td class="r"><b>${esc(inrShortR(c.txn_limit))}</b></td><td class="r">${esc(inrShortR(c.daily_limit))}</td><td class="small muted">${esc(c.source)}</td></tr>`).join("")}
+        </tbody></table></div></div>`;
+  };
+
+  // ---------- Webhooks
+  PAGES.webhooks = async (view, params) => {
+    let status = params.get("status") || "DEAD";
+    view.innerHTML = `<div class="toolbar"><div class="chips" id="wh-s">${[["DEAD", "Dead-lettered"], ["PENDING", "Retrying"], ["DELIVERED", "Delivered"]].map(([k, l]) => `<button class="chip ${k === status ? "on" : ""}" data-s="${k}">${l}</button>`).join("")}</div>
+      <span class="spacer"></span><span class="small muted">Signed with HMAC-SHA256 (X-ATF-Signature), retried with exponential backoff, then dead-lettered for replay</span></div><div class="card"><div class="table-wrap" id="wh-b"></div></div>`;
+    async function load() {
+      const d = await api("GET", `/admin/webhooks?status=${status}&limit=200`);
+      const w = d.webhooks || [];
+      $("#wh-b").innerHTML = w.length ? `<table class="t"><thead><tr><th>Created</th><th>Event</th><th>Gateway</th><th>Event ID</th><th class="r">Attempts</th><th>Status</th><th>${status === "DELIVERED" ? "Delivered" : "Last error"}</th>${status === "DEAD" && can("ops") ? "<th></th>" : ""}</tr></thead><tbody>
+        ${w.map((e) => `<tr><td>${esc(dt(e.created_at))}</td><td><span class="code">${esc(e.event_type)}</span></td><td>${esc(tName(e.tenant_id))}</td><td class="mono small">${esc(short(e.event_id, 22))}</td><td class="r">${num(e.attempts)}</td><td>${pill(e.status)}</td>
+          <td class="small ellipsis" style="max-width:340px" title="${esc(e.last_error)}">${status === "DELIVERED" ? esc(dt(e.delivered_at)) : `<span style="color:var(--bad)">${esc(e.last_error || "—")}</span>`}</td>
+          ${status === "DEAD" && can("ops") ? `<td class="r"><button class="btn sm" data-replay="${esc(e.id)}">Replay</button></td>` : ""}</tr>`).join("")}</tbody></table>` : empty(status === "DEAD" ? "No dead-lettered events" : "Nothing here", status === "DEAD" ? "Every webhook reached its gateway." : "");
+      $$("[data-replay]").forEach((b) => b.onclick = async () => { try { await api("POST", `/admin/webhooks/${b.dataset.replay}/replay`); toast("Queued for redelivery"); load(); } catch (e) { toast(e.message, true); } });
+    }
+    $$("#wh-s .chip").forEach((c) => c.onclick = () => { status = c.dataset.s; $$("#wh-s .chip").forEach((x) => x.classList.toggle("on", x === c)); load(); });
+    await load();
+  };
+
+  // ---------- Audit
+  PAGES.audit = async (view) => {
+    const [v, d] = await Promise.all([api("GET", "/admin/audit/verify"), api("GET", "/admin/audit?limit=200")]);
+    view.innerHTML = `<div class="card banner-ok" style="margin-bottom:16px"><div class="ic" style="background:${v.intact ? "var(--ok-soft)" : "var(--bad-soft)"};color:${v.intact ? "var(--ok)" : "var(--bad)"}">${ic("audit")}</div>
+        <div><b>${v.intact ? "Hash chain verified" : "Hash chain broken at entry " + esc(v.first_broken_id)}</b><div class="small muted">${num(v.entries)} entries. Each entry hashes the previous one, and the database rejects updates and deletes, so any tampering shows up here.</div></div></div>
+      <div class="card"><div class="table-wrap"><table class="t"><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Detail</th><th>Hash</th></tr></thead><tbody>
+      ${(d.entries || []).map((e) => `<tr><td>${esc(dt(e.at))}</td><td><div class="row"><span class="avatar" style="width:24px;height:24px;font-size:10px;background:${hueFor(e.actor)}">${esc(initials(e.actor.split(":")[1] || e.actor))}</span>${esc(e.actor.replace(/^(console|admin):/, ""))}</div></td>
+        <td><span class="code">${esc(e.action)}</span></td><td>${esc(e.entity)} <span class="mono small muted">${esc(e.entity_id)}</span></td>
+        <td class="mono small ellipsis" style="max-width:280px" title="${esc(JSON.stringify(e.detail))}">${esc(JSON.stringify(e.detail))}</td><td class="mono small faint">${esc(e.hash.slice(0, 12))}…</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+  };
+
+  // ------------------------------------------------------------ boot
+  (async () => {
+    try { const me = await api("GET", "/admin/me"); await enter(me); }
+    catch (e) { showLogin(); }
+  })();
 })();
 </script>
 </body>

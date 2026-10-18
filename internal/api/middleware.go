@@ -38,6 +38,7 @@ const (
 	ctxTenant ctxKey = iota
 	ctxBody
 	ctxActor
+	ctxUser
 )
 
 func tenantFrom(ctx context.Context) *domain.Tenant {
@@ -107,6 +108,10 @@ func (s *Server) observe(next http.Handler) http.Handler {
 			rid = security.RandomToken(8)
 		}
 		w.Header().Set(HeaderRequestID, rid)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if s.secureCookie(r) {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		rec := &statusRecorder{ResponseWriter: w}
 		next.ServeHTTP(rec, r)
 		route := r.Pattern
@@ -128,8 +133,9 @@ func (s *Server) observe(next http.Handler) http.Handler {
 func (s *Server) clientIP(r *http.Request) net.IP {
 	if s.cfg.TrustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			if ip := net.ParseIP(strings.TrimSpace(first)); ip != nil {
+			// The right-most entry is the one our proxy added; entries to its left are whatever the client sent.
+			hops := strings.Split(xff, ",")
+			if ip := net.ParseIP(strings.TrimSpace(hops[len(hops)-1])); ip != nil {
 				return ip
 			}
 		}
@@ -280,28 +286,34 @@ const (
 
 var roleRank = map[string]int{RoleViewer: 1, RoleOps: 2, RoleAdmin: 3}
 
-// adminAuth checks a bearer token and that its role is at least need.
+// adminAuth accepts a bearer token or a signed console session cookie and checks that its role is at least need.
 func (s *Server) adminAuth(need string, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		var role, name string
-		if ok {
+		var u ConsoleUser
+		var actor string
+		if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
 			for _, a := range s.cfg.AdminTokens {
 				if security.EqualHex(hexOf(a.Token), hexOf(tok)) {
-					role, name = a.Role, a.Name
+					u, actor = ConsoleUser{Email: a.Name, Name: a.Name, Role: a.Role}, "admin:"+a.Name
 					break
 				}
 			}
+		} else if ss, ok := s.sessionFrom(r); ok {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(HeaderConsole) == "" {
+				fail(w, http.StatusForbidden, "csrf", "console requests must carry the "+HeaderConsole+" header")
+				return
+			}
+			u, actor = ConsoleUser{Email: ss.Email, Name: ss.Name, Role: ss.Role}, "console:"+ss.Email
 		}
-		if role == "" {
-			fail(w, http.StatusUnauthorized, "unauthenticated", "valid admin bearer token required")
+		if u.Role == "" {
+			fail(w, http.StatusUnauthorized, "unauthenticated", "sign in or send a valid admin bearer token")
 			return
 		}
-		if roleRank[role] < roleRank[need] {
-			fail(w, http.StatusForbidden, "forbidden", "role "+role+" cannot perform this action")
+		if roleRank[u.Role] < roleRank[need] {
+			fail(w, http.StatusForbidden, "forbidden", "role "+u.Role+" cannot perform this action")
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), ctxActor, "admin:"+name)))
+		next(w, r.WithContext(withUser(r.Context(), u, actor)))
 	})
 }
 
